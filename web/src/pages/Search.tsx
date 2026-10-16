@@ -1,14 +1,16 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { api, money, type Account, type SubmissionRow } from '../api';
+import { api, fmtDate, money, policyBadge, type Account, type PolicyRow, type SubmissionRow } from '../api';
 import SubmissionTable from '../components/SubmissionTable';
-import { Button, Empty, FieldRow, PageTitle, Panel, Select, Tabs, TextInput, Toolbar } from '../components/ui';
+import { Button, Empty, FieldRow, PageTitle, Panel, Select, StatusBadge, Tabs, TextInput, Toolbar } from '../components/ui';
 import { useApp } from '../context';
 
 export default function Search() {
   const { ref, producers, users } = useApp();
   const [params] = useSearchParams();
-  const [tab, setTab] = useState<'submissions' | 'accounts'>('submissions');
+  const [tab, setTab] = useState<'submissions' | 'policies' | 'accounts'>(params.get('tab') === 'policies' ? 'policies' : 'submissions');
+  const [policies, setPolicies] = useState<PolicyRow[] | null>(null);
+  const [policyStatus, setPolicyStatus] = useState('');
   const [q, setQ] = useState(params.get('q') ?? '');
   const [status, setStatus] = useState('');
   const [product, setProduct] = useState('');
@@ -27,6 +29,8 @@ export default function Search() {
       if (producerId) p.set('producerId', String(producerId));
       if (underwriterId) p.set('underwriterId', String(underwriterId));
       setSubs(await api(`/submissions?${p}`));
+    } else if (tab === 'policies') {
+      setPolicies(await api(`/policies?q=${encodeURIComponent(q)}${policyStatus ? `&status=${encodeURIComponent(policyStatus)}` : ''}`));
     } else {
       setAccounts(await api(`/accounts?q=${encodeURIComponent(q)}`));
     }
@@ -40,13 +44,16 @@ export default function Search() {
   return (
     <div className="content-pad">
       <PageTitle>Search</PageTitle>
-      <Tabs tabs={[{ key: 'submissions', label: 'Submissions' }, { key: 'accounts', label: 'Accounts' }]} active={tab} onChange={setTab} />
+      <Tabs tabs={[{ key: 'submissions', label: 'Submissions & Transactions' }, { key: 'policies', label: 'Policies' }, { key: 'accounts', label: 'Accounts' }]} active={tab} onChange={setTab} />
       <Panel>
         <form onSubmit={search} className="search-form">
           <div className="grid-2">
-            <FieldRow label={tab === 'submissions' ? 'Account name / Job #' : 'Name / Account # / FEIN / City'}>
+            <FieldRow label={tab === 'submissions' ? 'Account name / Job #' : tab === 'policies' ? 'Policy # / Account name' : 'Name / Account # / FEIN / City'}>
               <TextInput value={q} onChange={setQ} />
             </FieldRow>
+            {tab === 'policies' && (
+              <FieldRow label="Status"><Select value={policyStatus} onChange={setPolicyStatus} placeholder="<any>" options={['In Force', 'Scheduled', 'Bound - Pending Issuance', 'Pending Cancellation', 'Canceled', 'Expired']} /></FieldRow>
+            )}
             {tab === 'submissions' && (
               <>
                 <FieldRow label="Status"><Select value={status} onChange={setStatus} placeholder="<any>" options={statuses.map((s) => ({ value: s, label: s.replace('_', ' ') }))} /></FieldRow>
@@ -64,6 +71,9 @@ export default function Search() {
       </Panel>
       <Panel title="Search Results">
         {tab === 'submissions' && (subs ? <SubmissionTable rows={subs} /> : <Empty>Loading...</Empty>)}
+        {tab === 'policies' && (policies ? (
+          !policies.length ? <Empty>No policies found.</Empty> : <PolicyTable rows={policies} />
+        ) : <Empty>Loading...</Empty>)}
         {tab === 'accounts' && (accounts ? (
           !accounts.length ? <Empty>No accounts found.</Empty> : (
             <table className="list">
@@ -81,5 +91,26 @@ export default function Search() {
         ) : <Empty>Loading...</Empty>)}
       </Panel>
     </div>
+  );
+}
+
+export function PolicyTable({ rows }: { rows: PolicyRow[] }) {
+  return (
+    <table className="list">
+      <thead><tr><th>Policy #</th><th>Account</th><th>Product</th><th>Status</th><th>Term</th><th>Producer</th><th className="r">Term Premium</th></tr></thead>
+      <tbody>
+        {rows.map((p) => (
+          <tr key={p.id}>
+            <td><Link to={`/policies/${p.id}`}>{p.policyNumber}</Link></td>
+            <td><Link to={`/accounts/${p.accountId}`}>{p.accountName}</Link></td>
+            <td>{p.productName}</td>
+            <td><StatusBadge status={policyBadge(p.status)} label={p.status} /></td>
+            <td>{fmtDate(p.periodStart)} - {fmtDate(p.periodEnd)}</td>
+            <td>{p.producerName}</td>
+            <td className="r">{money(p.termPremium)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

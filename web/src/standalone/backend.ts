@@ -4,9 +4,9 @@
 
 import initSqlJs from 'sql.js/dist/sql-asm-memory-growth.js';
 import type { Database, SqlValue } from 'sql.js';
-import { SCHEMA, setDb } from '../../../server/src/db';
+import { SCHEMA, migrate, setDb } from '../../../server/src/db';
 import { dispatch, resolveUser } from '../../../server/src/routes';
-import { seed } from '../../../server/src/seed';
+import { seed, seedPolicyExamples } from '../../../server/src/seed';
 import { WorkflowError } from '../../../server/src/services/workflow';
 
 const IDB_NAME = 'prebind-center';
@@ -80,9 +80,15 @@ async function loadSaved(): Promise<Uint8Array | null> {
 async function save(bytes: Uint8Array | null) {
   try {
     const d = await idb();
-    const store = d.transaction(IDB_STORE, 'readwrite').objectStore(IDB_STORE);
+    const tx = d.transaction(IDB_STORE, 'readwrite');
+    const store = tx.objectStore(IDB_STORE);
     if (bytes) store.put(bytes, IDB_KEY);
     else store.delete(IDB_KEY);
+    await new Promise<void>((resolve) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    });
   } catch {
     // Storage blocked (private window etc.): the app still works for this session.
   }
@@ -98,10 +104,22 @@ async function boot(fresh: boolean) {
   const adapter = new SqlJsAdapter(sqlDb);
   adapter.exec('PRAGMA foreign_keys = ON;');
   adapter.exec(SCHEMA);
+  // Bring data saved by an earlier version of the page up to the current schema, keeping it.
+  const migrated = migrate(adapter as never);
   setDb(adapter as never);
   const users = adapter.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number };
+  const policies = adapter.prepare('SELECT COUNT(*) AS n FROM policies').get() as { n: number };
   if (!users.n) {
     seed();
+    await save(sqlDb.export());
+  } else if (!policies.n) {
+    try {
+      seedPolicyExamples();
+    } catch (e) {
+      console.warn('Could not add sample policies', e);
+    }
+    await save(sqlDb.export());
+  } else if (migrated) {
     await save(sqlDb.export());
   }
 }
@@ -111,10 +129,9 @@ function ensureReady() {
   return ready;
 }
 
-let saveTimer: ReturnType<typeof setTimeout> | undefined;
-function persistSoon() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => sqlDb && save(sqlDb.export()), 200);
+/** Write the database to IndexedDB; changes are saved before the screen updates, so closing the tab loses nothing. */
+async function persist() {
+  if (sqlDb) await save(sqlDb.export());
 }
 
 /** Wipe this browser's data and reload the sample submissions. */
@@ -154,7 +171,7 @@ export async function localApi(method: string, pathWithQuery: string, userId: nu
   }
   try {
     const out = dispatch(method, url.pathname, { query: Object.fromEntries(url.searchParams), body: reqBody, user, file });
-    if (method !== 'GET') persistSoon();
+    if (method !== 'GET') await persist();
     return JSON.parse(JSON.stringify(out ?? null));
   } catch (e) {
     if (e instanceof WorkflowError) throw new LocalApiError(e.message, e.status, e.details);

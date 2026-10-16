@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, fmtDateTime, type Account, type SubmissionRow } from '../api';
+import { api, fmtDateTime, type Account, type PolicyRow, type SubmissionRow } from '../api';
+import { PolicyTable } from './Search';
 import AccountForm from '../components/AccountForm';
 import SubmissionTable from '../components/SubmissionTable';
 import { Button, Messages, PageTitle, Panel, Toolbar } from '../components/ui';
@@ -9,6 +10,7 @@ import { pushRecent } from '../recent';
 interface AccountData {
   account: Account;
   submissions: SubmissionRow[];
+  policies: PolicyRow[];
   history: { id: number; event: string; detail: string; user_name: string; created_at: string }[];
 }
 
@@ -68,7 +70,10 @@ export default function AccountPage() {
       <Panel title="Account Information">
         <AccountForm value={edit ?? a} onChange={setEdit} readOnly={!edit} />
       </Panel>
-      <Panel title={`Submissions (${data.submissions.length})`}>
+      <Panel title={`Policies (${data.policies.length})`}>
+        {data.policies.length ? <PolicyTable rows={data.policies} /> : <div className="muted">No policies yet.</div>}
+      </Panel>
+      <Panel title={`Submissions & Transactions (${data.submissions.length})`}>
         <SubmissionTable rows={data.submissions} showAccount={false} />
       </Panel>
       <Panel title="Account History">

@@ -8,7 +8,8 @@ export default function SubmissionTable({ rows, showAccount = true }: { rows: Su
     <table className="list">
       <thead>
         <tr>
-          <th>Submission #</th>
+          <th>Transaction #</th>
+          <th>Type</th>
           {showAccount && <th>Account</th>}
           <th>Product</th>
           <th>Status</th>
@@ -23,6 +24,7 @@ export default function SubmissionTable({ rows, showAccount = true }: { rows: Su
         {rows.map((r) => (
           <tr key={r.id}>
             <td><Link to={`/submissions/${r.id}`}>{r.jobNumber}</Link></td>
+            <td>{r.jobTypeLabel ?? 'Submission'}</td>
             {showAccount && <td><Link to={`/accounts/${r.accountId}`}>{r.accountName}</Link></td>}
             <td>{r.productName}</td>
             <td><StatusBadge status={r.status} label={r.statusLabel} /></td>

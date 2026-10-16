@@ -7,15 +7,16 @@ interface Item {
 interface Recent {
   accounts: Item[];
   submissions: Item[];
+  policies: Item[];
 }
 
 const KEY = 'recentItems';
 
 export function getRecent(): Recent {
   try {
-    return { accounts: [], submissions: [], ...JSON.parse(localStorage.getItem(KEY) ?? '{}') };
+    return { accounts: [], submissions: [], policies: [], ...JSON.parse(localStorage.getItem(KEY) ?? '{}') };
   } catch {
-    return { accounts: [], submissions: [] };
+    return { accounts: [], submissions: [], policies: [] };
   }
 }
 

@@ -5,7 +5,8 @@ import { PRODUCTS, referenceData } from './products/index.js';
 import { nameSimilarity } from './services/clearance.js';
 import { validateRisk } from './services/validation.js';
 import * as wf from './services/workflow.js';
-import { STATUS_LABELS, type Account, type Product, type User } from './types.js';
+import * as pol from './services/policy.js';
+import { JOB_TYPE_LABELS, STATUS_LABELS, type Account, type Product, type User } from './types.js';
 
 export interface RouteRequest {
   params: Record<string, string>;
@@ -55,6 +56,10 @@ export function submissionDetail(subId: number) {
   const d = getDb();
   const versions = repo.versions(subId);
   const selected = versions.find((v) => v.id === sub.selectedVersionId) ?? versions[0];
+  // Quotes issued before subjectivity tracking existed get their checklist on first view.
+  if ((sub.jobType === 'Submission' || sub.jobType === 'Renewal') && sub.status === 'QUOTED' && selected && !pol.subjectivities(subId).length) {
+    pol.syncSubjectivities(sub, selected.id);
+  }
   return {
     submission: { ...sub, statusLabel: STATUS_LABELS[sub.status] },
     account: repo.account(sub.accountId),
@@ -66,8 +71,16 @@ export function submissionDetail(subId: number) {
     validation: selected ? validateRisk(selected.risk) : [],
     quoteBlockers: selected ? wf.quoteBlockers(sub, selected) : [],
     subjectivities: selected ? wf.subjectivitiesFor(sub, selected.id) : [],
+    subjectivityItems: pol.subjectivities(subId),
+    jobTypeLabel: JOB_TYPE_LABELS[sub.jobType],
+    policy: sub.policyId ? { id: sub.policyId, policyNumber: pol.getPolicy(sub.policyId).policyNumber, status: pol.policyStatus(sub.policyId) } : null,
+    premiumSummary: pol.premiumSummary(sub, selected),
+    basePeriod: pol.basePeriodOf(sub) ?? null,
+    bindBlockers: pol.bindBlockers(sub),
+    paymentPlans: pol.PAYMENT_PLANS,
+    billingMethods: pol.BILLING_METHODS,
     quotes: d.prepare('SELECT id, version_id AS versionId, quote_number AS quoteNumber, premium, total_cost AS totalCost, valid_until AS validUntil, status, created_by AS createdBy, created_at AS createdAt FROM quotes WHERE submission_id = ? ORDER BY id DESC').all(subId),
-    documents: d.prepare('SELECT id, name, doc_type AS docType, mime_type AS mimeType, size, quote_id AS quoteId, uploaded_by AS uploadedBy, created_at AS createdAt FROM documents WHERE submission_id = ? ORDER BY id DESC').all(subId),
+    documents: d.prepare('SELECT id, name, doc_type AS docType, mime_type AS mimeType, size, quote_id AS quoteId, policy_id AS policyId, (doc_json IS NOT NULL) AS viewable, uploaded_by AS uploadedBy, created_at AS createdAt FROM documents WHERE submission_id = ? ORDER BY id DESC').all(subId),
     notes: d.prepare('SELECT * FROM notes WHERE submission_id = ? ORDER BY id DESC').all(subId),
     activities: d.prepare('SELECT a.*, u.name AS assigned_name FROM activities a LEFT JOIN users u ON u.id = a.assigned_to WHERE submission_id = ? ORDER BY a.id DESC').all(subId),
     history: d.prepare('SELECT * FROM history WHERE submission_id = ? ORDER BY id DESC').all(subId),
@@ -76,7 +89,7 @@ export function submissionDetail(subId: number) {
 
 function submissionRows(where: string, params: (string | number)[], limit = 200) {
   return getDb()
-    .prepare(`SELECT s.id, s.job_number AS jobNumber, s.product, s.status, s.effective_date AS effectiveDate, s.received_date AS receivedDate,
+    .prepare(`SELECT s.id, s.job_number AS jobNumber, s.job_type AS jobType, s.product, s.status, s.effective_date AS effectiveDate, s.received_date AS receivedDate,
         s.priority, s.updated_at AS updatedAt, a.id AS accountId, a.name AS accountName, a.account_number AS accountNumber, a.state,
         p.name AS producerName, u.name AS underwriterName,
         (SELECT pricing_json IS NOT NULL FROM versions v WHERE v.id = s.selected_version_id) AS rated,
@@ -84,7 +97,7 @@ function submissionRows(where: string, params: (string | number)[], limit = 200)
       FROM submissions s JOIN accounts a ON a.id = s.account_id JOIN producers p ON p.id = s.producer_id LEFT JOIN users u ON u.id = s.underwriter_id
       WHERE ${where} ORDER BY s.updated_at DESC LIMIT ${limit}`)
     .all(...params)
-    .map((r: any) => ({ ...r, statusLabel: STATUS_LABELS[r.status as keyof typeof STATUS_LABELS], productName: PRODUCTS[r.product as Product]?.name }));
+    .map((r: any) => ({ ...r, statusLabel: STATUS_LABELS[r.status as keyof typeof STATUS_LABELS], productName: PRODUCTS[r.product as Product]?.name, jobTypeLabel: JOB_TYPE_LABELS[r.jobType as keyof typeof JOB_TYPE_LABELS] ?? 'Submission' }));
 }
 
 // ------------------------------------------------------------ reference & admin
@@ -113,6 +126,10 @@ r('GET', '/desktop', (req) => {
     myActivities: d.prepare(`SELECT a.*, s.job_number AS jobNumber, acc.name AS accountName FROM activities a
       LEFT JOIN submissions s ON s.id = a.submission_id LEFT JOIN accounts acc ON acc.id = s.account_id
       WHERE a.assigned_to = ? AND a.status = 'Open' ORDER BY a.due_date IS NULL, a.due_date, a.id`).all(uid),
+    renewalsDue: (d.prepare('SELECT id FROM policies').all() as { id: number }[])
+      .map((p) => pol.policySummaryRow(pol.getPolicy(p.id)))
+      .filter((p) => p.periodEnd && p.status !== 'Canceled' && pol.daysBetween(pol.today(), p.periodEnd) <= 90 && !pol.policyDetail(p.id).renewal),
+    policyCount: (d.prepare('SELECT COUNT(*) AS n FROM policies').get() as { n: number }).n,
     recentQuotes: d.prepare(`SELECT q.id, q.quote_number AS quoteNumber, q.premium, q.valid_until AS validUntil, q.created_at AS createdAt, s.id AS submissionId,
       s.job_number AS jobNumber, s.product, a.name AS accountName FROM quotes q JOIN submissions s ON s.id = q.submission_id JOIN accounts a ON a.id = s.account_id
       WHERE q.status = 'Active' ORDER BY q.id DESC LIMIT 10`).all(),
@@ -143,6 +160,7 @@ r('GET', '/accounts/:id', (req) => {
   return {
     account,
     submissions: submissionRows('s.account_id = ?', [account.id]),
+    policies: (getDb().prepare('SELECT id FROM policies WHERE account_id = ? ORDER BY id').all(account.id) as { id: number }[]).map((p) => pol.policySummaryRow(pol.getPolicy(p.id))),
     history: getDb().prepare('SELECT * FROM history WHERE account_id = ? ORDER BY id DESC LIMIT 50').all(account.id),
   };
 });
@@ -246,4 +264,30 @@ r('GET', '/quotes/:id', (req) => {
   const q = getDb().prepare('SELECT * FROM quotes WHERE id = ?').get(Number(req.params.id)) as any;
   if (!q) throw new wf.WorkflowError('Quote not found', 404);
   return { id: q.id, submissionId: q.submission_id, status: q.status, snapshot: JSON.parse(q.snapshot_json) };
+});
+
+// ------------------------------------------------------------ bind & policy servicing
+r('POST', '/submissions/:id/bind', (req) => { pol.bindJob(Number(req.params.id), { issue: req.body?.issue !== false }, req.user); return submissionDetail(Number(req.params.id)); });
+r('POST', '/submissions/:id/non-renew', (req) => { pol.nonRenew(Number(req.params.id), req.body?.reason, req.user); return submissionDetail(Number(req.params.id)); });
+r('POST', '/subjectivities/:id', (req) => pol.decideSubjectivity(Number(req.params.id), req.body?.action, req.user));
+
+r('GET', '/policies', (req) => {
+  const q = String(req.query.q ?? '').trim().toLowerCase();
+  const status = req.query.status;
+  return (getDb().prepare('SELECT id FROM policies ORDER BY id DESC').all() as { id: number }[])
+    .map((p) => pol.policySummaryRow(pol.getPolicy(p.id)))
+    .filter((p) => (!q || p.policyNumber.toLowerCase().includes(q) || p.accountName.toLowerCase().includes(q)) && (!status || p.status === status));
+});
+r('GET', '/policies/:id', (req) => pol.policyDetail(Number(req.params.id)));
+r('POST', '/policies/:id/change', (req) => ({ jobId: pol.startPolicyChange(Number(req.params.id), req.body, req.user).id }));
+r('POST', '/policies/:id/cancel', (req) => ({ jobId: pol.startCancellation(Number(req.params.id), req.body, req.user).id }));
+r('POST', '/policies/:id/reinstate', (req) => ({ jobId: pol.startReinstatement(Number(req.params.id), req.body, req.user).id }));
+r('POST', '/policies/:id/renew', (req) => ({ jobId: pol.startRenewal(Number(req.params.id), req.user).id }));
+r('POST', '/policies/:id/issue', (req) => { pol.issuePolicy(Number(req.params.id), req.user); return pol.policyDetail(Number(req.params.id)); });
+r('POST', '/invoices/:id/pay', (req) => pol.payInvoice(Number(req.params.id), req.user));
+r('GET', '/documents/:id', (req) => {
+  const doc = getDb().prepare('SELECT * FROM documents WHERE id = ?').get(Number(req.params.id)) as any;
+  if (!doc) throw new wf.WorkflowError('Document not found', 404);
+  if (!doc.doc_json) throw new wf.WorkflowError('This document has no on-screen view.', 404);
+  return { id: doc.id, name: doc.name, docType: doc.doc_type, policyId: doc.policy_id, jobId: doc.submission_id, snapshot: JSON.parse(doc.doc_json) };
 });

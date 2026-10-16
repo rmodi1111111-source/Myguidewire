@@ -9,6 +9,8 @@ import NewSubmission from './pages/NewSubmission';
 import SubmissionPage from './pages/SubmissionPage';
 import Admin from './pages/Admin';
 import QuoteProposal from './pages/QuoteProposal';
+import PolicyFile from './pages/PolicyFile';
+import PolicyDocument from './pages/PolicyDocument';
 import { getRecent } from './recent';
 
 function Header() {
@@ -58,6 +60,10 @@ function Header() {
           { label: 'New Submission...', to: '/new-submission' },
           ...recent.submissions.map((s) => ({ label: s.label, to: `/submissions/${s.id}` })),
         ])}
+        {menu('policy', 'Policy', [
+          { label: 'Search Policies...', to: '/search?tab=policies' },
+          ...recent.policies.map((p) => ({ label: p.label, to: `/policies/${p.id}` })),
+        ])}
         <NavLink to="/search" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>Search</NavLink>
         <NavLink to="/admin" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>Administration</NavLink>
       </nav>
@@ -90,6 +96,8 @@ export default function App() {
           <Route path="/submissions/:id/*" element={<SubmissionPage />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/quotes/:id" element={<QuoteProposal />} />
+          <Route path="/policies/:id/*" element={<PolicyFile />} />
+          <Route path="/documents/:id" element={<PolicyDocument />} />
           <Route path="*" element={<div className="content-pad">Page not found.</div>} />
         </Routes>
       </main>

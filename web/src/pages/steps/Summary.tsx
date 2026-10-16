@@ -10,14 +10,26 @@ export default function Summary({ detail }: StepProps) {
   const activeQuote = quotes.find((q) => q.status === 'Active');
 
   // Pipeline tracker
-  const stages = [
+  const isSubmission = s.jobType === 'Submission';
+  const reached = (st: string[]) => st.includes(s.status);
+  const stages = !isSubmission ? [
+    { label: 'Started', done: true },
+    ...(s.jobType === 'PolicyChange' || s.jobType === 'Renewal' ? [
+      { label: 'Risk Changes', done: detail.validation.every((v) => v.level !== 'error') },
+      { label: 'Rated', done: !!selected.pricing },
+      { label: 'UW Review', done: !!selected.pricing && openIssues.length === 0 },
+    ] : []),
+    { label: 'Quoted', done: reached(['QUOTED', 'BOUND']) },
+    { label: s.jobType === 'Renewal' ? 'Renewal Issued' : 'Bound', done: reached(['BOUND']) },
+  ] : [
     { label: 'Intake', done: true },
     { label: 'Clearance', done: !!s.clearance && !['INTAKE', 'CLEARANCE_REFERRAL'].includes(s.status) && !(s.status === 'DECLINED' && !s.clearance?.override && s.clearance.outcome === 'DECLINE') },
     { label: 'Risk Entry', done: detail.validation.every((v) => v.level !== 'error') },
     { label: 'CRP Scan', done: !!s.scan },
     { label: 'Pricing', done: !!selected.pricing },
     { label: 'UW Review', done: !!selected.pricing && openIssues.filter((i) => i.blockingPoint === 'Quote').length === 0 },
-    { label: 'Quote', done: s.status === 'QUOTED' },
+    { label: 'Quote', done: reached(['QUOTED', 'BOUND']) },
+    { label: 'Bound', done: reached(['BOUND']) },
   ];
 
   return (
@@ -31,8 +43,9 @@ export default function Summary({ detail }: StepProps) {
         ))}
       </div>
       <div className="grid-2">
-        <Panel title="Submission">
-          <FieldRow label="Submission #">{s.jobNumber}</FieldRow>
+        <Panel title={detail.jobTypeLabel}>
+          <FieldRow label="Transaction #">{s.jobNumber}</FieldRow>
+          {detail.policy && <FieldRow label="Policy"><Link to={`/policies/${detail.policy.id}`}>{detail.policy.policyNumber}</Link> ({detail.policy.status})</FieldRow>}
           <FieldRow label="Status"><StatusBadge status={s.status} label={s.statusLabel} /></FieldRow>
           <FieldRow label="Policy Period">{fmtDate(s.effectiveDate)} - {fmtDate(s.expirationDate)}</FieldRow>
           <FieldRow label="Received">{fmtDate(s.receivedDate)} via {s.source}</FieldRow>
@@ -53,8 +66,17 @@ export default function Summary({ detail }: StepProps) {
           <FieldRow label="Website">{account.website || '-'}</FieldRow>
         </Panel>
       </div>
-      <div className="grid-3">
-        <Panel title="Clearance">
+      {!isSubmission && detail.premiumSummary && (
+        <Panel title={`${detail.jobTypeLabel} on policy ${detail.policy?.policyNumber ?? ''}`}>
+          <FieldRow label="Effective">{fmtDate(s.effectiveDate)}</FieldRow>
+          <FieldRow label="Description">{s.description || '-'}</FieldRow>
+          {detail.premiumSummary.priorAnnualPremium !== undefined && <FieldRow label="In-Force Annual Premium">{money(detail.premiumSummary.priorAnnualPremium)}</FieldRow>}
+          {detail.premiumSummary.transactionPremium !== undefined && <FieldRow label={s.jobType === 'Renewal' ? 'Renewal Premium' : 'Transaction Premium'}>{money(detail.premiumSummary.transactionPremium)}</FieldRow>}
+          {detail.premiumSummary.newTermPremium !== undefined && <FieldRow label="Term Premium After">{money(detail.premiumSummary.newTermPremium)}</FieldRow>}
+        </Panel>
+      )}
+      {(s.jobType === 'Cancellation' || s.jobType === 'Reinstatement') ? null : <><div className="grid-3">
+        {isSubmission && <Panel title="Clearance">
           {s.clearance ? (
             <>
               <StatusBadge status={s.clearance.outcome} /> {s.clearance.override && <em> overridden by {s.clearance.override.by}</em>}
@@ -64,7 +86,7 @@ export default function Summary({ detail }: StepProps) {
             </>
           ) : 'Not run'}
           <Link to="clearance">Details</Link>
-        </Panel>
+        </Panel>}
         <Panel title="CRP Scan">
           {s.scan ? (
             <div className="score-inline">
@@ -95,7 +117,7 @@ export default function Summary({ detail }: StepProps) {
             ))}
           </tbody>
         </table>
-      </Panel>
+      </Panel></>}
     </>
   );
 }

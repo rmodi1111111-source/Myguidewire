@@ -1,8 +1,8 @@
 # PreBind Center
 
-A pre-bind underwriting workbench for **Cyber Liability**, **Commercial Property** and **General Liability**, modeled on the Guidewire PolicyCenter submission workflow. It covers everything up to bind:
+A policy administration workbench for **Cyber Liability**, **Commercial Property** and **General Liability**, modeled on the Guidewire PolicyCenter job workflow, from first submission through the life of the policy:
 
-**Submission intake → Clearance → Risk entry → CRP scan → UW review → Pricing → Quote document**
+**Submission intake → Clearance → Risk entry → CRP scan → UW review → Pricing → Quote → Bind / Issue → Policy servicing (change, cancel, reinstate, renew)**
 
 > Independent implementation inspired by PolicyCenter's workflow, screen layout and terminology (Account → Submission job → Versions, wizard steps, UW issues with authority levels, Close Options, Edit Quote). It contains no Guidewire code, assets or branding and is not affiliated with Guidewire Software.
 
@@ -55,13 +55,26 @@ Switch users with the selector at the top right to exercise authority levels:
 | **Pricing** | Quote / rating worksheet | Product rating engines produce a full, line-by-line rating worksheet, premium by coverage, minimum premium, policy fee and state surcharges. Supports up to 5 **versions** (alternative limits or retentions) that are rated and compared side by side. |
 | **Quote** | Quote, quote documents | Issuing a quote requires the version to be rated, with no open or rejected Quote-blocking issues. It generates a quote number, a 30-day validity window, and a **PDF quote proposal** (coverage schedule, premium summary, subjectivities, forms schedule, terms). **Edit Quote** supersedes the active quote. Decline, Withdraw and Reopen are available as close options. |
 
-**Bind is intentionally out of scope.** The Bind Options button is present but disabled, and quoted submissions stay in **Quoted** status for hand-off.
+| **Bind & issue** | Payment step, Bind Options | Choose the payment plan (Full Pay, Quarterly, Monthly) and billing method (Direct or Agency Bill). Clear the subjectivity checklist: underwriters mark items received, and waiving needs authority 2. Bind is blocked by any open or rejected Quote- or Bind-level UW issue, and by any unreceived prior-to-bind subjectivity. **Bind Only** issues a binder and leaves the policy pending issuance; **Issue Policy** also issues the declarations. Binding creates the policy number, term 1 / model 1, the installment schedule, and a follow-up activity for post-bind subjectivities. |
+| **Policy File** | Policy tab | Summary, Policy Contract and Risk Details (viewable as of any term and model), Transactions, Billing (invoices billed 20 days before they fall due, with payments and refunds), Documents and History. The Actions menu starts each policy transaction. |
+| **Policy Change** | Policy Change job | Starts from the in-force model with a change effective date. You edit the same risk screens, re-rate, review differences on **Policy Review**, and see the pro-rata additional or return premium. Then quote and issue it to create a new model, an endorsement and a billing charge. UW approvals carry forward until the approved value changes. |
+| **Cancellation** | Cancellation job | Source (insured or carrier) and reason. Carrier reasons enforce notice days: 10 for nonpayment, 30 otherwise, and only a manager can override. Refund method is pro rata, short rate (90%, insured requests only) or flat (term start only). Binding cancels future installments, settles the earned-premium difference on billing, and generates the notice. A future-dated cancellation shows as Pending Cancellation. |
+| **Reinstatement** | Reinstatement job | Requires authority 2, within 60 days of the cancellation. Restores coverage with no lapse and reverses the billing. |
+| **Renewal** | Renewal job | Opens 120 days before expiration. Risk and losses are copied to the new term, which is re-scanned, re-rated, re-underwritten, quoted and issued. **Non-Renew** (authority 2) generates a non-renewal notice instead. The Desktop lists renewals due within 90 days. |
+
+All generated documents (binder, declarations, endorsement, cancellation, reinstatement and non-renewal notices) display on screen. Only one change, cancellation or reinstatement can be open on a policy at a time, and a transaction is blocked if the policy changed after it started.
 
 Tools on every submission: Documents (upload/download), Notes, Activities, and a full History audit trail. The Desktop shows My Summary (pipeline counts), My Activities, My Submissions, the Clearance Queue and Active Quotes. Search covers submissions and accounts. Administration shows users and authority, producers, appetite, rating tables and the sanctions list.
 
 ## Sample data
 
-`npm run seed` loads submissions at every stage:
+`npm run seed` loads submissions at every stage, plus three policies:
+
+- **CYB-1000001** Lakeshore Dental (Cyber): written 11 months ago on a quarterly plan, with a mid-term limit increase. Its **renewal is due**.
+- **CPP-1000002** Granite Peak Manufacturing (Property): in force on a monthly plan
+- **CGL-1000003** Riverside Cafe (GL): **canceled for nonpayment** five days ago, with past-due installments and a return-premium credit. It can be reinstated.
+
+Submissions:
 
 - **CY-20001** Northwind Health (Cyber): scanned, two versions ($3M/$25K and $5M/$50K), issues approved, **quoted** with PDF
 - **CP-20002** Bayside Logistics (Property, Tampa FL): three buildings, **rated**, with open TIV / Tier-1 wind / roof issues

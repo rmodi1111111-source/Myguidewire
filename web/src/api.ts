@@ -3,7 +3,8 @@ import type {
 } from '../../server/src/types';
 
 export type { Account, ClearanceResult, CrpScanResult, Producer, Product, RiskData, Submission, User, UWIssue, Version };
-export type { CyberRisk, PropertyRisk, GLRisk, Building, Location, GLExposure, Loss, PricingResult, QuoteSnapshot } from '../../server/src/types';
+export type { CyberRisk, PropertyRisk, GLRisk, Building, Location, GLExposure, Loss, PricingResult, QuoteSnapshot, Policy, PolicyPeriod, Subjectivity, Invoice, JobType } from '../../server/src/types';
+import type { Invoice, JobType, Policy, PolicyPeriod, Subjectivity } from '../../server/src/types';
 
 export class ApiError extends Error {
   constructor(message: string, public status: number, public details?: unknown) {
@@ -56,6 +57,8 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
 export interface SubmissionRow {
   id: number;
   jobNumber: string;
+  jobType: JobType;
+  jobTypeLabel: string;
   product: Product;
   productName: string;
   status: Submission['status'];
@@ -90,13 +93,79 @@ export interface SubmissionDetail {
   validation: ValidationMessage[];
   quoteBlockers: string[];
   subjectivities: string[];
+  subjectivityItems: Subjectivity[];
+  jobTypeLabel: string;
+  policy: { id: number; policyNumber: string; status: string } | null;
+  premiumSummary: PremiumSummary | null;
+  basePeriod: PolicyPeriod | null;
+  bindBlockers: string[];
+  paymentPlans: Record<string, { installments: number; downPct: number; months: number; fee: number }>;
+  billingMethods: string[];
   quotes: { id: number; versionId: number; quoteNumber: string; premium: number; totalCost: number; validUntil: string; status: string; createdBy: string; createdAt: string }[];
-  documents: { id: number; name: string; docType: string; mimeType: string; size: number | null; quoteId: number | null; uploadedBy: string; createdAt: string }[];
+  documents: { id: number; name: string; docType: string; mimeType: string; size: number | null; quoteId: number | null; policyId: number | null; viewable: number; uploadedBy: string; createdAt: string }[];
   notes: { id: number; topic: string; subject: string; body: string; author: string; created_at: string }[];
   activities: { id: number; subject: string; description: string; assigned_name: string; priority: string; due_date: string; status: string; created_at: string }[];
   history: { id: number; event: string; detail: string; user_name: string; created_at: string }[];
 }
 
-export const money = (n: number | null | undefined) => (n === null || n === undefined ? '-' : `$${Math.round(n).toLocaleString('en-US')}`);
+export const money = (n: number | null | undefined) =>
+  n === null || n === undefined || Number.isNaN(n) ? '-' : `${n < 0 ? '-' : ''}$${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
 export const fmtDate = (d: string | null | undefined) => (d ? new Date(d.length === 10 ? d + 'T00:00:00' : d).toLocaleDateString('en-US') : '-');
 export const fmtDateTime = (d: string | null | undefined) => (d ? new Date(d).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }) : '-');
+
+export interface PremiumSummary {
+  kind: JobType;
+  priorAnnualPremium?: number;
+  newAnnualPremium?: number;
+  proRataFactor?: number;
+  transactionPremium?: number;
+  priorTermPremium?: number;
+  newTermPremium?: number;
+  daysRemaining?: number;
+  termDays?: number;
+}
+
+export interface PolicyRow {
+  id: number;
+  policyNumber: string;
+  product: Product;
+  productName: string;
+  status: string;
+  accountId: number;
+  accountName: string;
+  state: string;
+  producerName: string;
+  underwriterName: string | null;
+  periodStart?: string;
+  periodEnd?: string;
+  termNumber?: number;
+  termPremium: number;
+}
+
+export interface PolicyDetail {
+  policy: Policy;
+  summary: PolicyRow;
+  account: Account;
+  producer: Producer;
+  underwriter: User | null;
+  currentPeriod: PolicyPeriod;
+  periods: PolicyPeriod[];
+  transactions: { id: number; jobNumber: string; jobType: JobType; jobTypeLabel: string; status: string; effectiveDate: string; description: string; transactionPremium: number | null; termNumber: number | null; modelNumber: number | null; createdAt: string }[];
+  openTransactions: { id: number; jobNumber: string; jobTypeLabel: string; status: string }[];
+  invoices: Invoice[];
+  billing: { billed: number; paid: number; outstanding: number; unbilled: number; paymentPlan: string; billingMethod: string };
+  renewal: { id: number; jobNumber: string; status: string } | null;
+  renewalWindowOpen: boolean;
+  documents: { id: number; name: string; docType: string; jobId: number; createdAt: string }[];
+  history: { id: number; event: string; detail: string; user_name: string; created_at: string; jobNumber: string }[];
+  reference: { cancellationReasons: Record<'Insured' | 'Carrier', { reason: string; noticeDays: number }[]>; cancellationMethods: string[] };
+}
+
+export const STATUS_TEXT: Record<string, string> = {
+  INTAKE: 'Intake', CLEARANCE_REFERRAL: 'Clearance Referral', DRAFT: 'Draft', RATED: 'Rated', QUOTED: 'Quoted', BOUND: 'Bound',
+  DECLINED: 'Declined', WITHDRAWN: 'Withdrawn', NON_RENEWED: 'Non-Renewed',
+};
+
+/** Badge class for a policy status. */
+export const policyBadge = (s: string) =>
+  s === 'In Force' ? 'PASS' : s === 'Canceled' || s === 'Expired' ? 'DECLINE' : s === 'Pending Cancellation' || s.startsWith('Bound') ? 'REFER' : 'DRAFT';

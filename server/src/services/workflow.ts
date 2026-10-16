@@ -9,6 +9,7 @@ import { rate } from './rating/index.js';
 import { runCrpScan } from './scan/crp.js';
 import { evaluateRules, standardSubjectivities } from './uwRules.js';
 import { validateRisk, type ValidationMessage } from './validation.js';
+import { syncSubjectivities } from './policy.js';
 
 export class WorkflowError extends Error {
   constructor(message: string, public status = 400, public details?: unknown) {
@@ -133,6 +134,7 @@ export function createSubmission(input: NewSubmissionInput, user: User): Submiss
 
 export function clearSubmission(id: number, user: User): Submission {
   const sub = requireSubmission(id);
+  if (sub.jobType !== 'Submission') throw new WorkflowError('Clearance applies to new business submissions only.', 409);
   if (!['INTAKE', 'CLEARANCE_REFERRAL', 'DRAFT'].includes(sub.status)) throw new WorkflowError('Clearance can only be run before rating.', 409);
   const result = runClearance(sub);
   return applyClearance(sub, result, user);
@@ -181,8 +183,23 @@ function closeActivities(subId: number, subject: string) {
 
 export function updateSubmissionInfo(id: number, data: Partial<Submission>, user: User): Submission {
   const sub = requireSubmission(id);
-  if (['QUOTED', 'DECLINED', 'WITHDRAWN'].includes(sub.status)) throw new WorkflowError('Submission cannot be edited in its current status.', 409);
   const fields: Record<string, unknown> = {};
+  if (data.paymentPlan !== undefined || data.billingMethod !== undefined) {
+    if (!['DRAFT', 'RATED', 'QUOTED'].includes(sub.status)) throw new WorkflowError('Payment details can only be changed before bind.', 409);
+    if (data.paymentPlan) fields.payment_plan = data.paymentPlan;
+    if (data.billingMethod) fields.billing_method = data.billingMethod;
+  }
+  if (['QUOTED', 'BOUND', 'DECLINED', 'WITHDRAWN', 'NON_RENEWED'].includes(sub.status)) {
+    if (Object.keys(fields).length && Object.keys(data).every((k) => k === 'paymentPlan' || k === 'billingMethod')) {
+      repo.updateSubmission(id, fields);
+      repo.history(id, sub.accountId, 'Payment details updated', `${data.paymentPlan ?? sub.paymentPlan}, ${data.billingMethod ?? sub.billingMethod}`, user.name);
+      return repo.submission(id)!;
+    }
+    throw new WorkflowError('This transaction cannot be edited in its current status.', 409);
+  }
+  if (sub.jobType !== 'Submission' && data.effectiveDate && data.effectiveDate !== sub.effectiveDate) {
+    throw new WorkflowError('The effective date of a policy transaction is fixed. Withdraw it and start a new one.', 409);
+  }
   if (data.effectiveDate && data.effectiveDate !== sub.effectiveDate) {
     fields.effective_date = data.effectiveDate;
     fields.expiration_date = addYear(data.effectiveDate);
@@ -394,6 +411,7 @@ export function issueQuote(subId: number, user: User) {
       .run(subId, `Quote Proposal ${quoteNumber}.pdf`, 'Quote Proposal', 'application/pdf', quoteId, 'System', now());
     getDb().prepare("UPDATE versions SET status='Quoted' WHERE id = ?").run(v.id);
     repo.updateSubmission(subId, { status: 'QUOTED' });
+    if (sub.jobType === 'Submission' || sub.jobType === 'Renewal') syncSubjectivities(sub, v.id);
     repo.history(subId, sub.accountId, 'Quote issued', `${quoteNumber} - premium $${v.pricing!.premium.toLocaleString()}, valid until ${validUntil}`, user.name);
     return quoteId;
   });
@@ -436,6 +454,7 @@ export function applicableForms(risk: RiskData) {
 export function editQuote(subId: number, user: User): Submission {
   const sub = requireSubmission(subId);
   if (sub.status !== 'QUOTED') throw new WorkflowError('Only quoted submissions can be edited.', 409);
+  if (sub.jobType === 'Cancellation' || sub.jobType === 'Reinstatement') throw new WorkflowError('Withdraw this transaction and start a new one to change its terms.', 409);
   getDb().prepare("UPDATE quotes SET status='Superseded' WHERE submission_id = ? AND status='Active'").run(subId);
   getDb().prepare("UPDATE versions SET status='Rated' WHERE submission_id = ? AND status='Quoted'").run(subId);
   repo.updateSubmission(subId, { status: 'RATED' });
@@ -447,7 +466,8 @@ export function editQuote(subId: number, user: User): Submission {
 
 export function declineSubmission(subId: number, reason: string, user: User): Submission {
   const sub = requireSubmission(subId);
-  if (['DECLINED', 'WITHDRAWN'].includes(sub.status)) throw new WorkflowError('Submission is already closed.', 409);
+  if (['DECLINED', 'WITHDRAWN', 'BOUND', 'NON_RENEWED'].includes(sub.status)) throw new WorkflowError('This transaction is already closed.', 409);
+  if (sub.jobType !== 'Submission') throw new WorkflowError('Only new business submissions can be declined. Withdraw the transaction, or non-renew a renewal.', 409);
   if (!reason?.trim()) throw new WorkflowError('A decline reason is required.');
   if (user.authorityLevel < 1) throw new WorkflowError('Only underwriters can decline submissions.', 403);
   getDb().prepare("UPDATE quotes SET status='Superseded' WHERE submission_id = ? AND status='Active'").run(subId);
@@ -459,9 +479,9 @@ export function declineSubmission(subId: number, reason: string, user: User): Su
 
 export function withdrawSubmission(subId: number, reason: string, user: User): Submission {
   const sub = requireSubmission(subId);
-  if (['DECLINED', 'WITHDRAWN'].includes(sub.status)) throw new WorkflowError('Submission is already closed.', 409);
+  if (['DECLINED', 'WITHDRAWN', 'BOUND', 'NON_RENEWED'].includes(sub.status)) throw new WorkflowError('This transaction is already closed.', 409);
   getDb().prepare("UPDATE quotes SET status='Superseded' WHERE submission_id = ? AND status='Active'").run(subId);
-  repo.updateSubmission(subId, { status: 'WITHDRAWN', decline_reason: reason?.trim() || 'Withdrawn by producer' });
+  repo.updateSubmission(subId, { status: 'WITHDRAWN', decline_reason: reason?.trim() || (sub.jobType === 'Submission' ? 'Withdrawn by producer' : 'Transaction withdrawn') });
   getDb().prepare("UPDATE activities SET status='Cancelled' WHERE submission_id=? AND status='Open'").run(subId);
   repo.history(subId, sub.accountId, 'Withdrawn', reason ?? '', user.name);
   return repo.submission(subId)!;
@@ -469,7 +489,7 @@ export function withdrawSubmission(subId: number, reason: string, user: User): S
 
 export function reopenSubmission(subId: number, user: User): Submission {
   const sub = requireSubmission(subId);
-  if (!['DECLINED', 'WITHDRAWN'].includes(sub.status)) throw new WorkflowError('Only closed submissions can be reopened.', 409);
+  if (!['DECLINED', 'WITHDRAWN'].includes(sub.status) || sub.jobType !== 'Submission') throw new WorkflowError('Only declined or withdrawn submissions can be reopened.', 409);
   if (user.authorityLevel < 2) throw new WorkflowError('Reopening requires authority level 2.', 403);
   invalidatePricing(sub);
   repo.updateSubmission(subId, { status: 'DRAFT', decline_reason: null });

@@ -277,3 +277,13 @@ table.worksheet td { padding: 3px 8px; }
   .proposal-grid { grid-template-columns: max-content 1fr; }
   .proposal > *:not(.proposal-head) { margin-left: 12px; margin-right: 12px; }
 }
+
+/* ---------- bind options / policy file ---------- */
+.menu-wrap { position: relative; display: inline-block; }
+.dropdown.right { left: auto; right: 0; top: calc(100% + 2px); }
+.side-nav.actions li { color: var(--blue); font-weight: 500; }
+.side-nav.actions li.locked { color: #9aa5b1; }
+.kpis.kpis-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 760px) { .kpis.kpis-4 { grid-template-columns: repeat(2, 1fr); } }
+.badge-bound { background: #d9ecf9; color: #1c4f86; }
+.badge-non_renewed { background: #fbdedb; color: var(--red); }

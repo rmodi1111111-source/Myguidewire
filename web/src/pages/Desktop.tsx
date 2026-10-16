@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, fmtDate, money, type SubmissionRow } from '../api';
+import { api, fmtDate, money, type PolicyRow, type SubmissionRow } from '../api';
+import { PolicyTable } from './Search';
 import SubmissionTable from '../components/SubmissionTable';
 import { Button, Empty, PageTitle, Panel, Toolbar } from '../components/ui';
 import { useApp } from '../context';
@@ -10,10 +11,12 @@ interface DesktopData {
   mySubmissions: SubmissionRow[];
   clearanceQueue: SubmissionRow[];
   myActivities: { id: number; subject: string; description: string; priority: string; due_date: string; submission_id: number; jobNumber: string; accountName: string }[];
+  renewalsDue: PolicyRow[];
+  policyCount: number;
   recentQuotes: { id: number; quoteNumber: string; premium: number; validUntil: string; submissionId: number; jobNumber: string; product: string; accountName: string }[];
 }
 
-type View = 'summary' | 'activities' | 'submissions' | 'queue' | 'quotes';
+type View = 'summary' | 'activities' | 'submissions' | 'queue' | 'quotes' | 'renewals';
 
 export default function Desktop() {
   const { user, ref } = useApp();
@@ -36,10 +39,11 @@ export default function Desktop() {
     { key: 'submissions', label: 'My Submissions', count: data?.mySubmissions.length },
     { key: 'queue', label: 'Clearance Queue', count: data?.clearanceQueue.length },
     { key: 'quotes', label: 'Active Quotes', count: data?.recentQuotes.length },
+    { key: 'renewals', label: 'Renewals Due', count: data?.renewalsDue.length },
   ];
 
   const pipeline: [string, string][] = [
-    ['INTAKE', 'Intake'], ['CLEARANCE_REFERRAL', 'Clearance Referral'], ['DRAFT', 'Draft'], ['RATED', 'Rated'], ['QUOTED', 'Quoted'], ['DECLINED', 'Declined'], ['WITHDRAWN', 'Withdrawn'],
+    ['INTAKE', 'Intake'], ['CLEARANCE_REFERRAL', 'Clearance Referral'], ['DRAFT', 'Draft'], ['RATED', 'Rated'], ['QUOTED', 'Quoted'], ['BOUND', 'Bound'], ['DECLINED', 'Declined'],
   ];
 
   return (
@@ -70,6 +74,11 @@ export default function Desktop() {
                     </div>
                   ))}
                 </div>
+                {data.renewalsDue.length > 0 && (
+                  <Panel title={`Renewals due in the next 90 days (${data.renewalsDue.length})`}>
+                    <PolicyTable rows={data.renewalsDue} />
+                  </Panel>
+                )}
                 <Panel title="Open activities">
                   <ActivityTable rows={data.myActivities.slice(0, 5)} onComplete={complete} />
                 </Panel>
@@ -77,6 +86,11 @@ export default function Desktop() {
                   <SubmissionTable rows={data.mySubmissions.slice(0, 8)} />
                 </Panel>
               </>
+            )}
+            {view === 'renewals' && (
+              <Panel title="Policies expiring within 90 days with no renewal started">
+                {data.renewalsDue.length ? <PolicyTable rows={data.renewalsDue} /> : <Empty>No renewals due.</Empty>}
+              </Panel>
             )}
             {view === 'activities' && <Panel><ActivityTable rows={data.myActivities} onComplete={complete} /></Panel>}
             {view === 'submissions' && <Panel><SubmissionTable rows={data.mySubmissions} /></Panel>}

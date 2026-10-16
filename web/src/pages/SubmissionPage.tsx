@@ -20,6 +20,7 @@ import RiskAnalysis from './steps/RiskAnalysis';
 import Pricing from './steps/Pricing';
 import QuoteStep from './steps/QuoteStep';
 import { Documents, History, Notes, Activities } from './steps/Tools';
+import { CancellationStep, PaymentStep, PolicyReviewStep, ReinstatementStep } from './steps/BindSteps';
 
 export interface StepProps {
   detail: SubmissionDetail;
@@ -45,6 +46,10 @@ const STEP_COMPONENTS: Record<string, (p: StepProps) => JSX.Element> = {
   'risk-analysis': RiskAnalysis,
   pricing: Pricing,
   quote: QuoteStep,
+  payment: PaymentStep,
+  'policy-review': PolicyReviewStep,
+  cancellation: CancellationStep,
+  reinstatement: ReinstatementStep,
   documents: Documents,
   notes: Notes,
   activities: Activities,
@@ -66,7 +71,8 @@ export default function SubmissionPage() {
   const [dirty, setDirty] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [infos, setInfos] = useState<string[]>([]);
-  const [closeDialog, setCloseDialog] = useState<'decline' | 'withdraw' | null>(null);
+  const [closeDialog, setCloseDialog] = useState<'decline' | 'withdraw' | 'nonrenew' | null>(null);
+  const [bindMenu, setBindMenu] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -123,21 +129,28 @@ export default function SubmissionPage() {
 
   const { submission: sub, account } = detail;
   const product = ref.products[sub.product];
+  const jobType = sub.jobType;
   const editable = sub.status === 'DRAFT' || sub.status === 'RATED';
-  const preClearance = sub.status === 'INTAKE' || sub.status === 'CLEARANCE_REFERRAL';
-  const closed = sub.status === 'DECLINED' || sub.status === 'WITHDRAWN';
+  const preClearance = jobType === 'Submission' && (sub.status === 'INTAKE' || sub.status === 'CLEARANCE_REFERRAL');
+  const closed = sub.status === 'DECLINED' || sub.status === 'WITHDRAWN' || sub.status === 'NON_RENEWED';
+  const bound = sub.status === 'BOUND';
   const version = detail.versions.find((v) => v.id === detail.selectedVersionId)!;
 
-  const wizard: { key: string; label: string }[] = [
-    { key: 'summary', label: 'Summary' },
-    { key: 'clearance', label: 'Clearance' },
-    { key: 'policy-info', label: 'Policy Info' },
-    ...product.riskSteps,
-    { key: 'losses', label: 'Loss History' },
-    { key: 'risk-analysis', label: 'Risk Analysis' },
-    { key: 'pricing', label: 'Pricing' },
-    { key: 'quote', label: 'Quote' },
-  ];
+  // Wizard steps per job type, as in the PolicyCenter job wizards.
+  const wizard: { key: string; label: string }[] =
+    jobType === 'Cancellation' ? [{ key: 'summary', label: 'Summary' }, { key: 'cancellation', label: 'Cancellation' }]
+      : jobType === 'Reinstatement' ? [{ key: 'summary', label: 'Summary' }, { key: 'reinstatement', label: 'Reinstatement' }]
+        : jobType === 'PolicyChange' ? [
+          { key: 'summary', label: 'Summary' }, { key: 'policy-info', label: 'Policy Info' }, ...product.riskSteps,
+          { key: 'risk-analysis', label: 'Risk Analysis' }, { key: 'pricing', label: 'Pricing' }, { key: 'policy-review', label: 'Policy Review' },
+        ]
+          : [
+            { key: 'summary', label: 'Summary' },
+            ...(jobType === 'Submission' ? [{ key: 'clearance', label: 'Clearance' }] : []),
+            { key: 'policy-info', label: 'Policy Info' }, ...product.riskSteps, { key: 'losses', label: 'Loss History' },
+            { key: 'risk-analysis', label: 'Risk Analysis' }, { key: 'pricing', label: 'Pricing' }, { key: 'quote', label: 'Quote' }, { key: 'payment', label: 'Payment' },
+          ];
+  const finalStep = wizard[wizard.length - 1].key;
   const tools = [
     { key: 'documents', label: `Documents (${detail.documents.length})` },
     { key: 'notes', label: `Notes (${detail.notes.length})` },
@@ -170,7 +183,7 @@ export default function SubmissionPage() {
   return (
     <div className="layout">
       <aside className="sidebar">
-        <div className="sidebar-title">{product.name} Submission</div>
+        <div className="sidebar-title">{product.name} {detail.jobTypeLabel}</div>
         <ul className="side-nav wizard">
           {wizard.map((w, i) => {
             const locked = preClearance && i > 1;
@@ -193,14 +206,17 @@ export default function SubmissionPage() {
       <div className="content">
         <div className="info-bar">
           <span><b>Account</b> <Link to={`/accounts/${account.id}`}>{account.name}</Link></span>
-          <span><b>Submission</b> {sub.jobNumber}</span>
+          <span><b>{detail.jobTypeLabel}</b> {sub.jobNumber}</span>
+          {detail.policy && <span><b>Policy</b> <Link to={`/policies/${detail.policy.id}`}>{detail.policy.policyNumber}</Link></span>}
           <span><b>Product</b> {product.name}</span>
           <span><b>Status</b> <StatusBadge status={sub.status} label={sub.statusLabel} /></span>
           <span><b>Effective</b> {fmtDate(sub.effectiveDate)}</span>
           <span><b>Producer</b> {detail.producer.name}</span>
           <span><b>UW</b> {detail.underwriter?.name ?? 'Unassigned'}</span>
           {detail.versions.length > 1 && <span><b>Version</b> {version.name}</span>}
-          <span><b>Premium</b> {money(premium)}</span>
+          {jobType === 'Submission' || jobType === 'Renewal'
+            ? <span><b>Premium</b> {money(premium)}</span>
+            : <span><b>Transaction Premium</b> {money(detail.premiumSummary?.transactionPremium)}</span>}
         </div>
         <div className="page-head">
           <h1>{[...wizard, ...tools].find((w) => w.key === step)?.label.replace(/ \(\d+\)$/, '') ?? 'Summary'}</h1>
@@ -209,11 +225,36 @@ export default function SubmissionPage() {
             {idx >= 0 && idx < wizard.length - 1 && !(preClearance && idx >= 1) && <Button onClick={() => goto(wizard[idx + 1].key)}>Next &gt;</Button>}
             {editable && dirty && <Button onClick={save}>Save Draft</Button>}
             {editable && <Button primary onClick={quote} disabled={busy}>{sub.status === 'RATED' && !dirty ? 'Re-Rate' : 'Rate'}</Button>}
-            {sub.status === 'QUOTED' && <Button onClick={() => act('/edit-quote')} disabled={user.authorityLevel < 1}>Edit Quote</Button>}
-            {!closed && <Button onClick={() => { setReason(''); setCloseDialog('withdraw'); }}>Withdraw</Button>}
-            {!closed && user.authorityLevel >= 1 && <Button danger onClick={() => { setReason(''); setCloseDialog('decline'); }}>Decline</Button>}
-            {closed && <Button onClick={() => act('/reopen')} disabled={user.authorityLevel < 2} title={user.authorityLevel < 2 ? 'Requires authority 2' : undefined}>Reopen</Button>}
-            <Button disabled title="Bind is outside the scope of this pre-bind workbench">Bind Options</Button>
+            {sub.status === 'QUOTED' && jobType !== 'Cancellation' && jobType !== 'Reinstatement' && <Button onClick={() => act('/edit-quote')} disabled={user.authorityLevel < 1}>Edit Quote</Button>}
+            {!closed && !bound && <Button onClick={() => { setReason(''); setCloseDialog('withdraw'); }}>Withdraw</Button>}
+            {!closed && !bound && jobType === 'Submission' && user.authorityLevel >= 1 && <Button danger onClick={() => { setReason(''); setCloseDialog('decline'); }}>Decline</Button>}
+            {!closed && !bound && jobType === 'Renewal' && <Button danger disabled={user.authorityLevel < 2} title={user.authorityLevel < 2 ? 'Requires authority 2' : undefined} onClick={() => { setReason(''); setCloseDialog('nonrenew'); }}>Non-Renew</Button>}
+            {closed && jobType === 'Submission' && <Button onClick={() => act('/reopen')} disabled={user.authorityLevel < 2} title={user.authorityLevel < 2 ? 'Requires authority 2' : undefined}>Reopen</Button>}
+            {!closed && !bound && (
+              <span className="menu-wrap">
+                <Button primary={sub.status === 'QUOTED'} disabled={sub.status !== 'QUOTED'} title={sub.status !== 'QUOTED' ? 'Quote first' : undefined} onClick={() => setBindMenu(!bindMenu)}>
+                  Bind Options &#9662;
+                </Button>
+                {bindMenu && (
+                  <div className="dropdown right" onMouseLeave={() => setBindMenu(false)}>
+                    {(jobType === 'Submission' ? [['Bind Only', false], ['Issue Policy', true]] as const
+                      : jobType === 'Renewal' ? [['Issue Renewal', true]] as const
+                        : jobType === 'PolicyChange' ? [['Issue Policy Change', true]] as const
+                          : jobType === 'Cancellation' ? [['Bind Cancellation', true]] as const
+                            : [['Reinstate Policy', true]] as const
+                    ).map(([labelText, issue]) => (
+                      <button key={labelText} className="dropdown-item" onClick={async () => {
+                        setBindMenu(false);
+                        if (!(await save())) return;
+                        if (!(await act('/bind', { issue }))) nav(`/submissions/${id}/${finalStep}`);
+                      }}>{labelText}</button>
+                    ))}
+                    {(jobType === 'Submission' || jobType === 'Renewal') && <button className="dropdown-item" onClick={() => { setBindMenu(false); goto('payment'); }}>Review payment & subjectivities...</button>}
+                  </div>
+                )}
+              </span>
+            )}
+            {bound && detail.policy && <Link className="btn btn-primary" to={`/policies/${detail.policy.id}`}>Go to Policy {detail.policy.policyNumber}</Link>}
           </Toolbar>
         </div>
         <Messages
@@ -221,11 +262,12 @@ export default function SubmissionPage() {
           warnings={[
             ...(dirty ? ['You have unsaved changes.'] : []),
             ...(editable ? validationForStep : []),
-            ...(sub.status === 'QUOTED' && step !== 'quote' ? ['This submission is quoted and read-only. Use Edit Quote to make changes (the current quote will be superseded).'] : []),
+            ...(sub.status === 'QUOTED' && !['quote', 'payment', 'policy-review', 'cancellation', 'reinstatement'].includes(step) && jobType !== 'Cancellation' && jobType !== 'Reinstatement' ? ['This transaction is quoted and read-only. Use Edit Quote to make changes, or Bind Options to bind it.'] : []),
           ]}
           infos={[
             ...infos,
             ...(closed ? [`${sub.statusLabel}: ${sub.declineReason ?? ''}`] : []),
+            ...(bound && detail.policy ? [`Bound on policy ${detail.policy.policyNumber}. This transaction is read-only; use the policy file for further changes.`] : []),
             ...(preClearance && step !== 'clearance' && step !== 'summary' ? ['Risk entry is available once the submission clears.'] : []),
           ]}
         />
@@ -233,23 +275,29 @@ export default function SubmissionPage() {
       </div>
       {closeDialog && (
         <Modal
-          title={closeDialog === 'decline' ? 'Decline Submission' : 'Withdraw Submission'}
+          title={closeDialog === 'decline' ? 'Decline Submission' : closeDialog === 'nonrenew' ? 'Non-Renew Policy' : `Withdraw ${detail.jobTypeLabel}`}
           onClose={() => setCloseDialog(null)}
           footer={
             <>
               <Button onClick={() => setCloseDialog(null)}>Cancel</Button>
-              <Button primary danger={closeDialog === 'decline'} onClick={async () => { if (await act(`/${closeDialog}`, { reason })) setCloseDialog(null); }}>
-                {closeDialog === 'decline' ? 'Decline' : 'Withdraw'}
+              <Button primary danger={closeDialog !== 'withdraw'} onClick={async () => { if (await act(`/${closeDialog === 'nonrenew' ? 'non-renew' : closeDialog}`, { reason })) setCloseDialog(null); }}>
+                {closeDialog === 'decline' ? 'Decline' : closeDialog === 'nonrenew' ? 'Non-Renew' : 'Withdraw'}
               </Button>
             </>
           }
         >
-          <p>{closeDialog === 'decline' ? 'Declining closes the submission and supersedes any quote. A reason is required and will be communicated to the producer.' : 'Record that the producer withdrew this submission.'}</p>
+          <p>{closeDialog === 'decline' ? 'Declining closes the submission and supersedes any quote. A reason is required and will be communicated to the producer.'
+            : closeDialog === 'nonrenew' ? 'The policy will expire at the end of the current term. A non-renewal notice is generated for the insured and producer.'
+              : jobType === 'Submission' ? 'Record that the producer withdrew this submission.' : 'Withdraw this transaction. The policy is not changed.'}</p>
           <select className="input" value={reason} onChange={(e) => setReason(e.target.value)}>
             <option value="">{'<select a reason>'}</option>
             {(closeDialog === 'decline'
               ? ['Outside appetite - class of business', 'Inadequate security controls', 'Adverse loss history', 'CAT exposure exceeds capacity', 'Insufficient information', 'Pricing inadequate for exposure', 'Sanctions / compliance']
-              : ['Placed with another carrier', 'Insured renewed with incumbent', 'Price not competitive', 'Coverage not competitive', 'Insured no longer needs coverage']
+              : closeDialog === 'nonrenew'
+                ? ['Adverse loss experience', 'Change in underwriting guidelines', 'Deterioration of security controls', 'CAT exposure management', 'Producer agreement terminated']
+                : jobType === 'Submission'
+                  ? ['Placed with another carrier', 'Insured renewed with incumbent', 'Price not competitive', 'Coverage not competitive', 'Insured no longer needs coverage']
+                  : ['Entered in error', 'Insured changed request', 'Superseded by another transaction']
             ).map((r) => <option key={r}>{r}</option>)}
           </select>
           <textarea className="input textarea" placeholder="Additional comments" onChange={(e) => setReason((r) => r.split(' - ')[0] + (e.target.value ? ` - ${e.target.value}` : ''))} />

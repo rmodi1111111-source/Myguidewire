@@ -3,6 +3,7 @@
 import { getDb, repo } from './db.js';
 import type { CyberRisk, GLRisk, PropertyRisk } from './types.js';
 import * as wf from './services/workflow.js';
+import * as pol from './services/policy.js';
 
 const daysFromNow = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
 
@@ -124,5 +125,85 @@ export function seed() {
   // 7. Broker-of-record conflict: Northwind cyber submitted by a second broker.
   wf.createSubmission({ accountId: northwind.id, producerId: 2, product: 'CYBER', effectiveDate: daysFromNow(35), source: 'Broker Email', description: 'Second broker submission - BOR letter pending.' }, intake);
 
+  seedPolicyExamples();
   return { users: users.length };
+}
+
+/** Approve every open UW issue and clear every subjectivity as the manager, then bind. */
+function underwriteAndBind(subId: number, plan: string) {
+  const mgr = repo.user(4)!;
+  wf.rateSubmission(subId, mgr);
+  for (const i of repo.issues(subId)) if (i.status === 'Open') wf.decideIssue(i.id, 'Approve', 'Approved at bind review', mgr);
+  wf.issueQuote(subId, mgr);
+  for (const s of pol.subjectivities(subId)) if (s.timing === 'Prior to Bind') pol.decideSubjectivity(s.id, 'receive', mgr);
+  wf.updateSubmissionInfo(subId, { paymentPlan: plan, billingMethod: 'Direct Bill' }, mgr);
+  return pol.bindJob(subId, { issue: true }, mgr);
+}
+
+function payBilled(policyId: number) {
+  const mgr = repo.user(4)!;
+  for (const i of pol.invoices(policyId)) if (i.status === 'Billed' && i.amount > 0) pol.payInvoice(i.id, mgr);
+}
+
+/** Policies at different points of the lifecycle: renewal due, in force with an endorsement, canceled. */
+export function seedPolicyExamples() {
+  const intake = repo.user(1)!;
+  const mgr = repo.user(4)!;
+  const users = getDb().prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number };
+  if (!users.n || !repo.producer(1)) return;
+
+  // 1. Cyber policy written 11 months ago, endorsed mid-term, renewal now due.
+  const lakeshore = wf.createAccount({ name: 'Lakeshore Dental Partners PLLC', fein: '27-4455661', entityType: 'Partnership', naics: '621111', industry: 'Offices of Physicians', address1: '300 N Lake Shore Dr', city: 'Chicago', state: 'IL', zip: '60611', website: 'lakeshoredental.com', yearsInBusiness: 18, annualRevenue: 11_500_000, employeeCount: 85, contactName: 'Dr. Amy Ruiz', contactEmail: 'aruiz@lakeshoredental.com', contactPhone: '312-555-0142' }, intake);
+  const s1 = wf.createSubmission({ accountId: lakeshore.id, producerId: 4, product: 'CYBER', effectiveDate: daysFromNow(-330), receivedDate: daysFromNow(-360), source: 'Broker Portal' }, intake);
+  {
+    const v = repo.version(s1.selectedVersionId!)!;
+    const risk = v.risk as CyberRisk;
+    Object.assign(risk, { piiRecords: 60_000, phiRecords: 95_000, domains: ['lakeshoredental.com'], answers: { ...GOOD_CYBER_ANSWERS, MDR_SOC: 'No' }, noLossesCertified: true });
+    wf.updateRisk(s1.id, v.id, risk, mgr);
+    wf.runScan(s1.id, mgr);
+    const bound = underwriteAndBind(s1.id, 'Quarterly');
+    payBilled(bound.policyId!);
+    const change = pol.startPolicyChange(bound.policyId!, { effectiveDate: daysFromNow(-120), description: 'Increase aggregate limit to $2M' }, mgr);
+    const cv = repo.version(change.selectedVersionId!)!;
+    const cr = cv.risk as CyberRisk;
+    cr.coverages.aggregateLimit = 2_000_000;
+    wf.updateRisk(change.id, cv.id, cr, mgr);
+    underwriteAndBind(change.id, 'Quarterly');
+    payBilled(bound.policyId!);
+  }
+
+  // 2. Property policy bound two months ago on a monthly plan.
+  const granite = wf.createAccount({ name: 'Granite Peak Manufacturing Inc', fein: '84-2211990', entityType: 'Corporation', naics: '332710', industry: 'Machine Shops', address1: '4500 Industrial Pkwy', city: 'Denver', state: 'CO', zip: '80216', website: 'granitepeakmfg.com', yearsInBusiness: 26, annualRevenue: 38_000_000, employeeCount: 210, contactName: 'Lee Carter', contactEmail: 'lcarter@granitepeakmfg.com', contactPhone: '303-555-0111' }, intake);
+  const s2 = wf.createSubmission({ accountId: granite.id, producerId: 1, product: 'PROPERTY', effectiveDate: daysFromNow(-60), receivedDate: daysFromNow(-95), source: 'ACORD Upload' }, intake);
+  {
+    const v = repo.version(s2.selectedVersionId!)!;
+    const risk = v.risk as PropertyRisk;
+    risk.locations[0].protectionClass = 3;
+    risk.buildings = [
+      { id: 'B1', locationId: 'L1', number: 1, description: 'Machining plant', constructionClass: 3, occupancy: 'Light Manufacturing', yearBuilt: 2004, roofYear: 2019, stories: 1, squareFeet: 85_000, sprinklerPct: 100, alarm: 'Central Station', occupiedPct: 100, buildingValue: 7_800_000, bppValue: 5_200_000, biValue: 3_000_000 },
+      { id: 'B2', locationId: 'L1', number: 2, description: 'Offices and showroom', constructionClass: 4, occupancy: 'Office', yearBuilt: 2004, roofYear: 2019, stories: 2, squareFeet: 18_000, sprinklerPct: 100, alarm: 'Central Station', occupiedPct: 100, buildingValue: 2_400_000, bppValue: 600_000, biValue: 0 },
+    ];
+    risk.noLossesCertified = true;
+    wf.updateRisk(s2.id, v.id, risk, mgr);
+    wf.runScan(s2.id, mgr);
+    const bound = underwriteAndBind(s2.id, 'Monthly');
+    payBilled(bound.policyId!);
+  }
+
+  // 3. GL policy canceled for nonpayment five days ago (eligible for reinstatement).
+  const riverside = wf.createAccount({ name: 'Riverside Cafe Group LLC', fein: '61-3030303', entityType: 'LLC', naics: '722511', industry: 'Full-Service Restaurants', address1: '15 Riverfront Ave', city: 'Columbus', state: 'OH', zip: '43215', website: 'riversidecafe.com', yearsInBusiness: 6, annualRevenue: 2_600_000, employeeCount: 38, contactName: 'Nina Park', contactEmail: 'nina@riversidecafe.com', contactPhone: '614-555-0193' }, intake);
+  const s3 = wf.createSubmission({ accountId: riverside.id, producerId: 4, product: 'GL', effectiveDate: daysFromNow(-200), receivedDate: daysFromNow(-230), source: 'Phone' }, intake);
+  {
+    const v = repo.version(s3.selectedVersionId!)!;
+    const risk = v.risk as GLRisk;
+    risk.exposures = [{ id: 'E1', locationId: 'L1', classCode: '16910', exposure: 2_600_000 }];
+    risk.noLossesCertified = true;
+    wf.updateRisk(s3.id, v.id, risk, mgr);
+    const bound = underwriteAndBind(s3.id, 'Monthly');
+    const policyId = bound.policyId!;
+    // First three installments paid, then the insured stopped paying.
+    pol.invoices(policyId).filter((i) => i.amount > 0).slice(0, 3).forEach((i) => pol.payInvoice(i.id, mgr));
+    const cancel = pol.startCancellation(policyId, { effectiveDate: daysFromNow(-5), source: 'Carrier', reason: 'Nonpayment of premium', method: 'Pro Rata' }, mgr);
+    pol.bindJob(cancel.id, {}, mgr);
+  }
 }

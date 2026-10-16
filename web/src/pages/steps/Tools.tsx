@@ -41,6 +41,7 @@ export function Documents({ detail, setDetail }: StepProps) {
                 <tr key={d.id}>
                   <td>
                     {d.quoteId ? <Link to={`/quotes/${d.quoteId}`}>{d.name.replace(/\.pdf$/, '')}</Link>
+                      : d.viewable ? <Link to={`/documents/${d.id}`}>{d.name}</Link>
                       : STANDALONE ? <span title="Stored in this browser">{d.name}</span>
                       : <a href={`/api/documents/${d.id}/download`} target="_blank" rel="noreferrer">{d.name}</a>}
                   </td>

@@ -9,8 +9,21 @@ export type SubmissionStatus =
   | 'DRAFT'
   | 'RATED'
   | 'QUOTED'
+  | 'BOUND'
   | 'DECLINED'
-  | 'WITHDRAWN';
+  | 'WITHDRAWN'
+  | 'NON_RENEWED';
+
+/** PolicyCenter job types. A Submission creates the policy; the others transact on it. */
+export type JobType = 'Submission' | 'PolicyChange' | 'Cancellation' | 'Reinstatement' | 'Renewal';
+
+export const JOB_TYPE_LABELS: Record<JobType, string> = {
+  Submission: 'Submission',
+  PolicyChange: 'Policy Change',
+  Cancellation: 'Cancellation',
+  Reinstatement: 'Reinstatement',
+  Renewal: 'Renewal',
+};
 
 export const STATUS_LABELS: Record<SubmissionStatus, string> = {
   INTAKE: 'Intake',
@@ -18,8 +31,10 @@ export const STATUS_LABELS: Record<SubmissionStatus, string> = {
   DRAFT: 'Draft',
   RATED: 'Rated',
   QUOTED: 'Quoted',
+  BOUND: 'Bound',
   DECLINED: 'Declined',
   WITHDRAWN: 'Withdrawn',
+  NON_RENEWED: 'Non-Renewed',
 };
 
 export type CheckOutcome = 'PASS' | 'REFER' | 'DECLINE';
@@ -295,8 +310,74 @@ export interface Submission {
   scan: CrpScanResult | null;
   declineReason: string | null;
   selectedVersionId: number | null;
+  jobType: JobType;
+  policyId: number | null;
+  paymentPlan: string;
+  billingMethod: string;
+  /** Job-type specific data (cancellation terms, change description, base period). */
+  jobData: Record<string, any>;
   createdAt: string;
   updatedAt: string;
+}
+
+export type PolicyStatus = 'In Force' | 'Scheduled' | 'Bound - Pending Issuance' | 'Pending Cancellation' | 'Canceled' | 'Expired';
+
+export interface Policy {
+  id: number;
+  policyNumber: string;
+  accountId: number;
+  product: Product;
+  producerId: number;
+  underwriterId: number | null;
+  originalEffectiveDate: string;
+  nonRenewalReason: string | null;
+  createdAt: string;
+}
+
+/** One model of one term of a policy (PolicyCenter PolicyPeriod). */
+export interface PolicyPeriod {
+  id: number;
+  policyId: number;
+  termNumber: number;
+  modelNumber: number;
+  periodStart: string;
+  periodEnd: string;
+  editEffectiveDate: string;
+  jobId: number;
+  risk: RiskData;
+  /** Annual (full-term) pricing for this model. */
+  pricing: PricingResult;
+  /** Premium charged or returned by the transaction that created this model. */
+  transactionPremium: number;
+  /** Written premium for the term after this transaction. */
+  termPremium: number;
+  cancellationDate: string | null;
+  issued: boolean;
+  status: 'Current' | 'Superseded';
+  createdAt: string;
+}
+
+export interface Subjectivity {
+  id: number;
+  submissionId: number;
+  text: string;
+  timing: 'Prior to Bind' | 'Post Bind';
+  dueDate: string | null;
+  status: 'Open' | 'Received' | 'Waived';
+  decidedBy: string | null;
+  decidedAt: string | null;
+}
+
+export interface Invoice {
+  id: number;
+  policyId: number;
+  jobId: number;
+  invoiceNumber: string;
+  description: string;
+  dueDate: string;
+  amount: number;
+  status: 'Planned' | 'Billed' | 'Paid' | 'Cancelled';
+  paidAt: string | null;
 }
 
 export interface Version {
@@ -306,7 +387,7 @@ export interface Version {
   name: string;
   risk: RiskData;
   pricing: PricingResult | null;
-  status: 'Draft' | 'Rated' | 'Quoted';
+  status: 'Draft' | 'Rated' | 'Quoted' | 'Bound';
   createdAt: string;
 }
 

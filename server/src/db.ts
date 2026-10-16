@@ -2,7 +2,7 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import type { Account, Producer, Submission, User, UWIssue, Version } from './types.js';
+import type { Account, Invoice, Policy, PolicyPeriod, Producer, Subjectivity, Submission, User, UWIssue, Version } from './types.js';
 
 type DatabaseSync = DatabaseSyncType;
 
@@ -117,6 +117,55 @@ CREATE TABLE IF NOT EXISTS documents (
   size INTEGER, storage_path TEXT, quote_id INTEGER,
   uploaded_by TEXT NOT NULL, created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS policies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  policy_number TEXT UNIQUE NOT NULL,
+  account_id INTEGER NOT NULL REFERENCES accounts(id),
+  product TEXT NOT NULL,
+  producer_id INTEGER NOT NULL REFERENCES producers(id),
+  underwriter_id INTEGER REFERENCES users(id),
+  original_effective_date TEXT NOT NULL,
+  non_renewal_reason TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS policy_periods (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  policy_id INTEGER NOT NULL REFERENCES policies(id),
+  term_number INTEGER NOT NULL,
+  model_number INTEGER NOT NULL,
+  period_start TEXT NOT NULL,
+  period_end TEXT NOT NULL,
+  edit_effective_date TEXT NOT NULL,
+  job_id INTEGER NOT NULL,
+  risk_json TEXT NOT NULL,
+  pricing_json TEXT NOT NULL,
+  transaction_premium REAL NOT NULL,
+  term_premium REAL NOT NULL,
+  cancellation_date TEXT,
+  issued INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'Current',
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS subjectivities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  submission_id INTEGER NOT NULL REFERENCES submissions(id),
+  text TEXT NOT NULL,
+  timing TEXT NOT NULL,
+  due_date TEXT,
+  status TEXT NOT NULL DEFAULT 'Open',
+  decided_by TEXT, decided_at TEXT
+);
+CREATE TABLE IF NOT EXISTS invoices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  policy_id INTEGER NOT NULL REFERENCES policies(id),
+  job_id INTEGER NOT NULL,
+  invoice_number TEXT NOT NULL,
+  description TEXT NOT NULL,
+  due_date TEXT NOT NULL,
+  amount REAL NOT NULL,
+  status TEXT NOT NULL,
+  paid_at TEXT
+);
 CREATE TABLE IF NOT EXISTS sequences (name TEXT PRIMARY KEY, value INTEGER NOT NULL);
 `;
 
@@ -127,7 +176,32 @@ export function initDb(file = process.env.DB_PATH ?? path.resolve('data', 'prebi
   db = new DatabaseSync(file);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  migrate(db);
   return db;
+}
+
+/** Columns added after the first release; applied to existing databases in place. */
+const ADDED_COLUMNS: [table: string, column: string, ddl: string][] = [
+  ['submissions', 'job_type', "TEXT NOT NULL DEFAULT 'Submission'"],
+  ['submissions', 'policy_id', 'INTEGER'],
+  ['submissions', 'payment_plan', "TEXT NOT NULL DEFAULT 'Full Pay'"],
+  ['submissions', 'billing_method', "TEXT NOT NULL DEFAULT 'Direct Bill'"],
+  ['submissions', 'job_json', 'TEXT'],
+  ['documents', 'policy_id', 'INTEGER'],
+  ['documents', 'doc_json', 'TEXT'],
+];
+
+/** Bring an existing database up to the current schema. Returns true if anything changed. */
+export function migrate(d: Pick<DatabaseSync, 'prepare' | 'exec'>): boolean {
+  let changed = false;
+  for (const [table, column, ddl] of ADDED_COLUMNS) {
+    const cols = d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!cols.some((c) => c.name === column)) {
+      d.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 /** Use an already-open database (the in-browser build supplies a sql.js-backed adapter). */
@@ -190,7 +264,30 @@ export const mapSubmission = (r: Row): Submission => ({
   underwriterId: r.underwriter_id, effectiveDate: r.effective_date, expirationDate: r.expiration_date, receivedDate: r.received_date,
   source: r.source ?? '', priority: r.priority ?? 'Normal', description: r.description ?? '',
   clearance: json(r.clearance_json), scan: json(r.scan_json), declineReason: r.decline_reason,
-  selectedVersionId: r.selected_version_id, createdAt: r.created_at, updatedAt: r.updated_at,
+  selectedVersionId: r.selected_version_id, jobType: r.job_type ?? 'Submission', policyId: r.policy_id ?? null,
+  paymentPlan: r.payment_plan ?? 'Full Pay', billingMethod: r.billing_method ?? 'Direct Bill', jobData: json(r.job_json) ?? {},
+  createdAt: r.created_at, updatedAt: r.updated_at,
+});
+
+export const mapPolicy = (r: Row): Policy => ({
+  id: r.id, policyNumber: r.policy_number, accountId: r.account_id, product: r.product, producerId: r.producer_id,
+  underwriterId: r.underwriter_id, originalEffectiveDate: r.original_effective_date, nonRenewalReason: r.non_renewal_reason, createdAt: r.created_at,
+});
+
+export const mapPeriod = (r: Row): PolicyPeriod => ({
+  id: r.id, policyId: r.policy_id, termNumber: r.term_number, modelNumber: r.model_number, periodStart: r.period_start, periodEnd: r.period_end,
+  editEffectiveDate: r.edit_effective_date, jobId: r.job_id, risk: JSON.parse(r.risk_json), pricing: JSON.parse(r.pricing_json),
+  transactionPremium: r.transaction_premium, termPremium: r.term_premium, cancellationDate: r.cancellation_date, issued: !!r.issued,
+  status: r.status, createdAt: r.created_at,
+});
+
+export const mapSubjectivity = (r: Row): Subjectivity => ({
+  id: r.id, submissionId: r.submission_id, text: r.text, timing: r.timing, dueDate: r.due_date, status: r.status, decidedBy: r.decided_by, decidedAt: r.decided_at,
+});
+
+export const mapInvoice = (r: Row): Invoice => ({
+  id: r.id, policyId: r.policy_id, jobId: r.job_id, invoiceNumber: r.invoice_number, description: r.description, dueDate: r.due_date,
+  amount: r.amount, status: r.status, paidAt: r.paid_at,
 });
 
 export const mapVersion = (r: Row): Version => ({
