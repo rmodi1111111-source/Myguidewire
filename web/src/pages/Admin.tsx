@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { money } from '../api';
+import { STANDALONE, money } from '../api';
+import { Button, Toolbar } from '../components/ui';
 import { PageTitle, Panel, Tabs } from '../components/ui';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
 
 type Tab = 'users' | 'producers' | 'appetite' | 'rating' | 'sanctions';
@@ -8,10 +10,32 @@ type Tab = 'users' | 'producers' | 'appetite' | 'rating' | 'sanctions';
 export default function Admin() {
   const { users, producers, ref } = useApp();
   const [tab, setTab] = useState<Tab>('users');
+  const [confirmReset, setConfirmReset] = useState(false);
+  const nav = useNavigate();
+  const reset = async () => {
+    const { resetDemoData } = await import('../standalone/backend');
+    await resetDemoData();
+    setConfirmReset(false);
+    nav('/');
+  };
   const products = ref.products as unknown as Record<string, { name: string; minimumPremium: number; policyFee: number; appetite: { declinedNaics: Record<string, string>; referredNaics: Record<string, string>; excludedStates: string[]; maxRevenueRefer?: number; maxRevenueDecline?: number; minYearsInBusiness?: number } }>;
   return (
     <div className="content-pad">
       <PageTitle sub="Reference configuration (read-only in this build)">Administration</PageTitle>
+      {STANDALONE && (
+        <Panel title="Sample Data">
+          <p>All submissions, quotes and documents are saved in this browser only. Resetting deletes everything you entered and reloads the sample submissions.</p>
+          <Toolbar>
+            {!confirmReset ? <Button danger onClick={() => setConfirmReset(true)}>Reset sample data...</Button> : (
+              <>
+                <span>Delete all data in this browser and reload the samples?</span>
+                <Button primary danger onClick={reset}>Yes, reset</Button>
+                <Button onClick={() => setConfirmReset(false)}>Cancel</Button>
+              </>
+            )}
+          </Toolbar>
+        </Panel>
+      )}
       <Tabs
         tabs={[
           { key: 'users', label: 'Users & Authority' },

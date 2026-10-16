@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { api, fmtDate, fmtDateTime, type SubmissionDetail } from '../../api';
+import { Link } from 'react-router-dom';
+import { STANDALONE, api, fmtDate, fmtDateTime, type SubmissionDetail } from '../../api';
 import { Button, Empty, FieldRow, Panel, Select, TextInput, Toolbar } from '../../components/ui';
 import { useApp } from '../../context';
 import type { StepProps } from '../SubmissionPage';
@@ -38,7 +39,11 @@ export function Documents({ detail, setDetail }: StepProps) {
             <tbody>
               {detail.documents.map((d) => (
                 <tr key={d.id}>
-                  <td><a href={`/api/documents/${d.id}/download`} target="_blank" rel="noreferrer">{d.name}</a></td>
+                  <td>
+                    {d.quoteId ? <Link to={`/quotes/${d.quoteId}`}>{d.name.replace(/\.pdf$/, '')}</Link>
+                      : STANDALONE ? <span title="Stored in this browser">{d.name}</span>
+                      : <a href={`/api/documents/${d.id}/download`} target="_blank" rel="noreferrer">{d.name}</a>}
+                  </td>
                   <td>{d.docType}</td>
                   <td>{d.size ? `${Math.ceil(d.size / 1024)} KB` : '-'}</td>
                   <td>{d.uploadedBy}</td>

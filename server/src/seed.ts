@@ -1,9 +1,6 @@
 // Sample data: users, producers, accounts and submissions at every workflow stage.
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { getDb, initDb, repo } from './db.js';
+import { getDb, repo } from './db.js';
 import type { CyberRisk, GLRisk, PropertyRisk } from './types.js';
 import * as wf from './services/workflow.js';
 
@@ -129,13 +126,3 @@ export function seed() {
 
   return { users: users.length };
 }
-
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isMain) {
-  const file = process.env.DB_PATH ?? path.resolve('data', 'prebind.db');
-  if (process.argv.includes('--reset')) for (const f of [file, `${file}-wal`, `${file}-shm`]) fs.rmSync(f, { force: true });
-  initDb(file);
-  seed();
-  console.log(`Seeded ${file}`);
-}
-

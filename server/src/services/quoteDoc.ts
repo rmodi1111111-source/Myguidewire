@@ -3,27 +3,10 @@
 import PDFDocument from 'pdfkit';
 import { CONSTRUCTION_CLASSES } from '../products/property.js';
 import { GL_LIMIT_OPTIONS, glClass } from '../products/gl.js';
-import type { Account, Producer, PricingResult, RiskData } from '../types.js';
+import type { QuoteSnapshot } from '../types.js';
 
-export interface QuoteSnapshot {
-  quoteNumber: string;
-  issuedAt: string;
-  validUntil: string;
-  product: RiskData['product'];
-  productName: string;
-  jobNumber: string;
-  effectiveDate: string;
-  expirationDate: string;
-  account: Account;
-  producer: Producer;
-  underwriter: { name: string; email: string } | null;
-  versionName: string;
-  risk: RiskData;
-  pricing: PricingResult;
-  scan: { compositeScore: number; grade: string; provider: string } | null;
-  forms: { number: string; title: string }[];
-  subjectivities: string[];
-}
+export type { QuoteSnapshot };
+
 
 export const CARRIER_NAME = process.env.CARRIER_NAME ?? 'Summit Ridge Insurance Company';
 

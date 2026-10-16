@@ -3,7 +3,7 @@ import type {
 } from '../../server/src/types';
 
 export type { Account, ClearanceResult, CrpScanResult, Producer, Product, RiskData, Submission, User, UWIssue, Version };
-export type { CyberRisk, PropertyRisk, GLRisk, Building, Location, GLExposure, Loss, PricingResult } from '../../server/src/types';
+export type { CyberRisk, PropertyRisk, GLRisk, Building, Location, GLExposure, Loss, PricingResult, QuoteSnapshot } from '../../server/src/types';
 
 export class ApiError extends Error {
   constructor(message: string, public status: number, public details?: unknown) {
@@ -11,7 +11,14 @@ export class ApiError extends Error {
   }
 }
 
-let currentUserId = Number(localStorage.getItem('userId')) || 0;
+export const STANDALONE = !!import.meta.env.VITE_STANDALONE;
+
+let currentUserId = 0;
+try {
+  currentUserId = Number(localStorage.getItem('userId')) || 0;
+} catch {
+  /* storage unavailable */
+}
 export const setApiUser = (id: number) => {
   currentUserId = id;
   try {
@@ -22,11 +29,22 @@ export const setApiUser = (id: number) => {
 };
 
 export async function api<T = any>(path: string, opts: { method?: string; body?: unknown; form?: FormData } = {}): Promise<T> {
+  const method = opts.method ?? (opts.body !== undefined || opts.form ? 'POST' : 'GET');
+  if (STANDALONE) {
+    // Standalone build: the server code runs in this page against an in-browser database.
+    const { localApi, LocalApiError } = await import('./standalone/backend');
+    try {
+      return (await localApi(method, path, currentUserId, opts.body, opts.form)) as T;
+    } catch (e) {
+      if (e instanceof LocalApiError) throw new ApiError(e.message, e.status, e.details);
+      throw e;
+    }
+  }
   const headers: Record<string, string> = {};
   if (currentUserId) headers['X-User-Id'] = String(currentUserId);
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
   const res = await fetch(`/api${path}`, {
-    method: opts.method ?? (opts.body !== undefined || opts.form ? 'POST' : 'GET'),
+    method,
     headers,
     body: opts.form ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
   });

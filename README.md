@@ -6,6 +6,10 @@ A pre-bind underwriting workbench for **Cyber Liability**, **Commercial Property
 
 > Independent implementation inspired by PolicyCenter's workflow, screen layout and terminology (Account → Submission job → Versions, wizard steps, UW issues with authority levels, Close Options, Edit Quote). It contains no Guidewire code, assets or branding and is not affiliated with Guidewire Software.
 
+## Run it on a tablet or phone (no install)
+
+`npm run build:standalone -w web` produces `web/dist-standalone/prebind-center.html`, one self-contained page with the whole app inside it: the UI, the same server routes and workflow code, and SQLite compiled to plain JavaScript (sql.js). Open it in any modern browser, or publish it as a link. Data is saved in that browser's IndexedDB. Administration → Reset sample data starts over. In this mode, quote proposals display on screen instead of as PDFs, and uploaded documents are stored in the browser but can't be downloaded again.
+
 ## Quick start
 
 Requires Node.js 22.5+ (uses the built-in `node:sqlite`).

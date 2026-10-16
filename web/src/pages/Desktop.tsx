@@ -99,7 +99,7 @@ export default function Desktop() {
                           <td>{ref.products[q.product]?.name}</td>
                           <td className="r">{money(q.premium)}</td>
                           <td>{fmtDate(q.validUntil)}</td>
-                          <td><a href={`/api/quotes/${q.id}/pdf`} target="_blank" rel="noreferrer">View PDF</a></td>
+                          <td><Link to={`/quotes/${q.id}`}>View Proposal</Link></td>
                         </tr>
                       ))}
                     </tbody>

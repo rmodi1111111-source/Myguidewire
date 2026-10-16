@@ -8,6 +8,7 @@ import AccountPage from './pages/AccountPage';
 import NewSubmission from './pages/NewSubmission';
 import SubmissionPage from './pages/SubmissionPage';
 import Admin from './pages/Admin';
+import QuoteProposal from './pages/QuoteProposal';
 import { getRecent } from './recent';
 
 function Header() {
@@ -26,8 +27,8 @@ function Header() {
   };
 
   const menu = (key: string, label: string, items: { label: string; to: string }[]) => (
-    <div className="tab-menu" onMouseEnter={() => setOpen(key)} onMouseLeave={() => setOpen(null)}>
-      <span className="tab">{label} <span className="caret">&#9662;</span></span>
+    <div className="tab-menu" onPointerEnter={(e) => e.pointerType === 'mouse' && setOpen(key)} onPointerLeave={(e) => e.pointerType === 'mouse' && setOpen(null)}>
+      <span className="tab" onClick={() => setOpen(open === key ? null : key)}>{label} <span className="caret">&#9662;</span></span>
       {open === key && (
         <div className="dropdown">
           {items.map((i) => (
@@ -88,6 +89,7 @@ export default function App() {
           <Route path="/new-submission" element={<NewSubmission />} />
           <Route path="/submissions/:id/*" element={<SubmissionPage />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/quotes/:id" element={<QuoteProposal />} />
           <Route path="*" element={<div className="content-pad">Page not found.</div>} />
         </Routes>
       </main>

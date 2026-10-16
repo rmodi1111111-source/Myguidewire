@@ -1,5 +1,5 @@
-import { useNavigate } from 'react-router-dom';
-import { fmtDate, fmtDateTime, money } from '../../api';
+import { Link, useNavigate } from 'react-router-dom';
+import { STANDALONE, fmtDate, fmtDateTime, money } from '../../api';
 import { Button, Empty, Panel, StatusBadge, Toolbar } from '../../components/ui';
 import type { StepProps } from '../SubmissionPage';
 
@@ -24,8 +24,8 @@ export default function QuoteStep({ detail, act }: StepProps) {
               <div><b>Valid until:</b> {fmtDate(active.validUntil)}</div>
             </div>
             <Toolbar>
-              <a className="btn btn-primary" href={`/api/quotes/${active.id}/pdf`} target="_blank" rel="noreferrer">View Quote Proposal (PDF)</a>
-              <a className="btn" href={`/api/quotes/${active.id}/pdf?download=1`}>Download</a>
+              <Link className="btn btn-primary" to={`/quotes/${active.id}`}>View Quote Proposal</Link>
+              {!STANDALONE && <a className="btn" href={`/api/quotes/${active.id}/pdf`} target="_blank" rel="noreferrer">PDF</a>}
             </Toolbar>
           </div>
           <div className="msg msg-info">
@@ -73,7 +73,7 @@ export default function QuoteStep({ detail, act }: StepProps) {
                   <td className="r">{money(q.totalCost)}</td>
                   <td>{fmtDate(q.validUntil)}</td>
                   <td>{fmtDateTime(q.createdAt)} - {q.createdBy}</td>
-                  <td><a href={`/api/quotes/${q.id}/pdf`} target="_blank" rel="noreferrer">PDF</a></td>
+                  <td><Link to={`/quotes/${q.id}`}>View</Link>{!STANDALONE && <> | <a href={`/api/quotes/${q.id}/pdf`} target="_blank" rel="noreferrer">PDF</a></>}</td>
                 </tr>
               ))}
             </tbody>

@@ -4,13 +4,11 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import type { Account, Producer, Submission, User, UWIssue, Version } from './types.js';
 
-// Loaded via require so test tooling (vite-node) does not try to bundle the node:sqlite builtin.
-const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
 type DatabaseSync = DatabaseSyncType;
 
 let db: DatabaseSync | null = null;
 
-const SCHEMA = `
+export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT UNIQUE NOT NULL,
@@ -123,11 +121,18 @@ CREATE TABLE IF NOT EXISTS sequences (name TEXT PRIMARY KEY, value INTEGER NOT N
 `;
 
 export function initDb(file = process.env.DB_PATH ?? path.resolve('data', 'prebind.db')): DatabaseSync {
+  // Loaded via require (and only here) so vite-node and the browser build never bundle the node:sqlite builtin.
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   db = new DatabaseSync(file);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
   return db;
+}
+
+/** Use an already-open database (the in-browser build supplies a sql.js-backed adapter). */
+export function setDb(d: DatabaseSync) {
+  db = d;
 }
 
 export function getDb(): DatabaseSync {

@@ -309,3 +309,24 @@ export interface Version {
   status: 'Draft' | 'Rated' | 'Quoted';
   createdAt: string;
 }
+
+/** Frozen copy of everything printed on a quote proposal. */
+export interface QuoteSnapshot {
+  quoteNumber: string;
+  issuedAt: string;
+  validUntil: string;
+  product: RiskData['product'];
+  productName: string;
+  jobNumber: string;
+  effectiveDate: string;
+  expirationDate: string;
+  account: Account;
+  producer: Producer;
+  underwriter: { name: string; email: string } | null;
+  versionName: string;
+  risk: RiskData;
+  pricing: PricingResult;
+  scan: { compositeScore: number; grade: string; provider: string } | null;
+  forms: { number: string; title: string }[];
+  subjectivities: string[];
+}

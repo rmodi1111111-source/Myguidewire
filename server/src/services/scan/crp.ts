@@ -215,6 +215,6 @@ export const SimulatedCrpProvider: ScanProvider = {
 export const PROVIDERS: Record<string, ScanProvider> = { simulated: SimulatedCrpProvider };
 
 export function runCrpScan(account: Account, risk: RiskData): CrpScanResult {
-  const provider = PROVIDERS[process.env.CRP_PROVIDER ?? 'simulated'] ?? SimulatedCrpProvider;
+  const provider = PROVIDERS[(typeof process !== 'undefined' && process.env?.CRP_PROVIDER) || 'simulated'] ?? SimulatedCrpProvider;
   return provider.scan(account, risk);
 }
