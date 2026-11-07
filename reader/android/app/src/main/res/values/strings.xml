@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Local Reader</string>
+    <string name="title_activity_main">Local Reader</string>
+    <string name="package_name">app.localreader.shelf</string>
+    <string name="custom_url_scheme">app.localreader.shelf</string>
+</resources>

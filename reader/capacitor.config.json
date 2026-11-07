@@ -1,0 +1,12 @@
+{
+  "appId": "app.localreader.shelf",
+  "appName": "Local Reader",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
+  },
+  "ios": {
+    "contentInset": "never"
+  }
+}
