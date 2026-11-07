@@ -40,7 +40,8 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: reader/package-lock.json }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '21' }
-      - uses: android-actions/setup-android@v3
+      # The ubuntu runner ships with the Android SDK (ANDROID_HOME); Gradle fetches any missing platform.
+      - run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
       - run: npm ci
         env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
       - run: npm run build && npx cap sync android
