@@ -1,0 +1,110 @@
+name: Local Reader apps
+
+# Builds the reader for Android (APK), Windows (installer + portable .exe),
+# iOS (unsigned .ipa for sideloading + simulator build) and the web, then
+# publishes them together as a pre-release you can download from your phone.
+
+on:
+  push:
+    paths:
+      - 'reader/**'
+      - '.github/workflows/reader-apps.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: reader
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: reader/package-lock.json }
+      - run: npm ci
+        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
+      - run: npm run build
+      - run: cd dist && zip -qr ../LocalReader-web.zip .
+      - uses: actions/upload-artifact@v4
+        with: { name: web, path: reader/LocalReader-web.zip }
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: reader/package-lock.json }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
+      - run: npm run build && npx cap sync android
+      - run: chmod +x gradlew && ./gradlew --no-daemon assembleDebug
+        working-directory: reader/android
+      - run: cp android/app/build/outputs/apk/debug/app-debug.apk LocalReader.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: android, path: reader/LocalReader.apk }
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: reader/package-lock.json }
+      - run: npm ci
+      - run: npm run electron:win
+        env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            reader/release/*.exe
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: reader/package-lock.json }
+      - run: npm ci
+        env: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }
+      - run: npm run build && npx cap sync ios
+      - name: Build unsigned device app
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release -sdk iphoneos \
+            -derivedDataPath build/ios CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          mkdir -p Payload && cp -R build/ios/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qr LocalReader-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with: { name: ios, path: reader/LocalReader-unsigned.ipa }
+
+  release:
+    needs: [web, android, windows, ios]
+    if: always() && needs.android.result == 'success'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - run: ls -la out
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: reader-build-${{ github.run_number }}
+          name: Local Reader 3.0 (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          body: |
+            Local Reader 3.0 — built from `${{ github.ref_name }}`.
+
+            * **Android**: `LocalReader.apk` — open on your phone and install (allow "install unknown apps"). Uninstall the old Local Reader first if Android says the package conflicts.
+            * **Windows**: `Local Reader Setup *.exe` (installer) or `LocalReader-*-portable.exe` (no install).
+            * **iPhone / iPad**: `LocalReader-unsigned.ipa` — install with a sideloading tool (Sideloadly / AltStore) using your Apple ID.
+            * **Web**: `LocalReader-web.zip` — host the folder on any HTTPS site and "Install" it from the browser.
+          files: out/*
