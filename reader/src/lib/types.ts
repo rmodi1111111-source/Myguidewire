@@ -43,6 +43,8 @@ export interface BookMeta {
   progress: number;
   bookmarks: Bookmark[];
   finished?: boolean;
+  /** Size of the EPUB file stored in the app for this book. */
+  epubSize?: number;
 }
 
 export interface Resource {
@@ -63,7 +65,7 @@ export interface ConvertedBook {
 }
 
 export type ThemeName = 'light' | 'sepia' | 'dark' | 'black';
-export type PageAnimation = 'slide' | 'flip' | 'fade' | 'none';
+export type PageAnimation = 'curl' | 'slide' | 'flip' | 'fade' | 'none';
 export type LayoutMode = 'paged' | 'scroll';
 
 export interface ReaderSettings {
@@ -86,7 +88,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   margin: 2,
   justify: true,
   theme: 'light',
-  animation: 'slide',
+  animation: 'curl',
   layout: 'paged',
   spread: 'auto',
   brightness: 1,

@@ -1095,6 +1095,49 @@ input[type='range'].scrubber::-moz-range-thumb {
   pointer-events: none;
   background: linear-gradient(270deg, rgba(0, 0, 0, 0.16) 0%, rgba(0, 0, 0, 0.04) 6%, rgba(255, 255, 255, 0.06) 14%, transparent 30%);
 }
+/* page curl */
+.rd-curl-shadow,
+.rd-curl-flap {
+  position: absolute;
+  inset: 0;
+  display: none;
+  pointer-events: none;
+  overflow: hidden;
+}
+.rd-curl-shadow {
+  z-index: 2;
+}
+.rd-curl-flap {
+  z-index: 4;
+  transform-origin: 0 0;
+  background: var(--bg);
+  will-change: transform, clip-path;
+  filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.25));
+}
+.rd-curl-flap::before {
+  /* back of the page: slightly darker paper */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(120, 100, 70, 0.07);
+}
+.rd-curl-flap-band,
+.rd-curl-shadow-band {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.rd-curl-flap-band {
+  /* crease shading: dark at the fold, light highlight, then soft shadow toward the edge */
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.22) 0%, rgba(0, 0, 0, 0.06) 12%, rgba(255, 255, 255, 0.35) 35%, rgba(255, 255, 255, 0.08) 70%, rgba(0, 0, 0, 0.1) 100%);
+}
+.reader[data-theme='dark'] .rd-curl-flap-band,
+.reader[data-theme='black'] .rd-curl-flap-band {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, rgba(255, 255, 255, 0.06) 35%, rgba(0, 0, 0, 0.2) 100%);
+}
+.rd-curl-shadow-band {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0.12) 40%, transparent);
+}
 .rd-spread .rd-frame::after,
 .rd-spread .rd-snap::before {
   /* book gutter in two-page view */
@@ -1562,4 +1605,205 @@ input[type='range'].scrubber::-moz-range-thumb {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ============================================================= reader extras */
+.quick-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.reader-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  z-index: 6;
+  background: var(--line);
+  pointer-events: none;
+}
+.reader-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  opacity: 0.7;
+}
+.chrome-on .reader-progress {
+  opacity: 0;
+}
+.scroll-track {
+  position: absolute;
+  top: calc(var(--sat) + 70px);
+  bottom: calc(var(--sab) + 40px);
+  right: calc(var(--sar) + 2px);
+  width: 40px;
+  z-index: 15;
+  pointer-events: none;
+}
+.scroll-thumb {
+  position: absolute;
+  right: 0;
+  width: 34px;
+  height: 56px;
+  border-radius: 17px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+  opacity: 0.85;
+  transition: transform 0.15s, opacity 0.15s;
+}
+.scroll-thumb.active {
+  transform: scale(1.12);
+  opacity: 1;
+  color: var(--accent);
+}
+.hint {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  background: rgba(15, 12, 8, 0.78);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 24px;
+  text-align: center;
+  animation: fade-in 0.3s;
+}
+.hint-zones {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr 1fr;
+  gap: 10px;
+  width: min(760px, 100%);
+}
+.hint-zones div {
+  border: 2px dashed rgba(255, 255, 255, 0.5);
+  border-radius: 16px;
+  padding: 24px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.hint-zones strong {
+  font-size: 34px;
+  line-height: 1;
+}
+.hint p {
+  margin: 0;
+  opacity: 0.9;
+}
+
+/* library tabs & EPUB files */
+.lib-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
+}
+.lib-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -1px;
+}
+.lib-tabs button.on {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+}
+.lib-tabs .count {
+  font-size: 11.5px;
+  background: var(--panel-2);
+  border-radius: 99px;
+  padding: 1px 7px;
+  color: var(--muted);
+}
+.epub-list {
+  display: grid;
+  gap: 10px;
+}
+.epub-intro {
+  margin: 0 0 6px;
+  line-height: 1.5;
+}
+.epub-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.epub-icon {
+  width: 44px;
+  height: 56px;
+  flex: none;
+  border-radius: 4px 7px 7px 4px;
+  background: linear-gradient(135deg, #3c5a3a, #2d5d5c);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 10px -4px rgba(0, 0, 0, 0.4);
+}
+.epub-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+}
+.epub-info strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+.epub-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+.btn:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+@media (max-width: 560px) {
+  .epub-row {
+    flex-wrap: wrap;
+  }
+  .epub-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+.reader-host.rd-scroll-mode ~ .reader-footer {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 16px calc(var(--sar) + 20px) calc(var(--sab) + 8px) calc(var(--sal) + 20px);
+  background: linear-gradient(180deg, transparent, var(--bg) 45%);
 }

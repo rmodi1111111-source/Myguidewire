@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BookMeta } from '../lib/types';
-import { deleteBook, getResource, LIBRARY_BUDGET, listBooks, putBook, requestPersistence, storageInfo, type StorageInfo } from '../lib/db';
+import { deleteBook, getResource, LIBRARY_BUDGET, listBooks, listEpubs, putBook, requestPersistence, storageInfo, type EpubFile, type StorageInfo } from '../lib/db';
 import { ACCEPT, importFile } from '../lib/import';
-import { exportEpub } from '../lib/epubExport';
-import { saveFile } from '../lib/platform';
+import { ensureEpub } from '../lib/epubExport';
+import { saveToDevice, shareFile } from '../lib/platform';
 import { Icon } from './Icon';
 import { SAMPLE_MD } from './sample';
 
@@ -47,6 +47,9 @@ export function Library({ onOpen }: { onOpen: (book: BookMeta) => void }) {
   const [menu, setMenu] = useState<BookMeta | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [tab, setTab] = useState<'books' | 'epubs'>('books');
+  const [epubs, setEpubs] = useState<Omit<EpubFile, 'blob'>[]>([]);
+  const [making, setMaking] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const queue = useRef<Promise<void>>(Promise.resolve());
 
@@ -54,7 +57,31 @@ export function Library({ onOpen }: { onOpen: (book: BookMeta) => void }) {
     const list = await listBooks();
     setBooks(list);
     setStorage(await storageInfo(list));
+    setEpubs(await listEpubs());
   }, []);
+
+  // Books imported before EPUB files were kept in the app get one now, in the background.
+  const backfilling = useRef(false);
+  useEffect(() => {
+    if (!books || backfilling.current) return;
+    const ids = new Set(epubs.map((e) => e.bookId));
+    const missing = books.filter((b) => !ids.has(b.id));
+    if (!missing.length) return;
+    backfilling.current = true;
+    (async () => {
+      for (const b of missing) {
+        setMaking(b.id);
+        try {
+          await ensureEpub(b);
+        } catch (e) {
+          console.error('EPUB creation failed', e);
+        }
+      }
+      setMaking(null);
+      backfilling.current = false;
+      await refresh();
+    })();
+  }, [books, epubs, refresh]);
 
   useEffect(() => {
     refresh();
@@ -166,14 +193,21 @@ export function Library({ onOpen }: { onOpen: (book: BookMeta) => void }) {
     setToast('Book deleted');
   };
 
-  const exportBook = async (b: BookMeta) => {
+  const exportBook = async (b: BookMeta, how: 'save' | 'share') => {
     setMenu(null);
-    setToast('Preparing EPUB…');
+    setToast(how === 'save' ? 'Saving EPUB…' : 'Preparing EPUB…');
     try {
-      const blob = await exportEpub(b);
-      await saveFile(blob, `${b.title.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'book'}.epub`);
-      setToast('EPUB ready');
+      const f = await ensureEpub(b);
+      if (how === 'save') {
+        const where = await saveToDevice(f.blob, f.fileName);
+        setToast(`Saved “${f.fileName}” to ${where}`);
+      } else {
+        await shareFile(f.blob, f.fileName);
+        setToast(null);
+      }
+      refresh();
     } catch (e) {
+      if ((e as Error)?.name === 'AbortError') return setToast(null);
       setToast(`Export failed: ${e instanceof Error ? e.message : e}`);
     }
   };
@@ -273,6 +307,44 @@ export function Library({ onOpen }: { onOpen: (book: BookMeta) => void }) {
           </section>
         )}
 
+        <div className="lib-tabs" role="tablist">
+          <button role="tab" className={tab === 'books' ? 'on' : ''} onClick={() => setTab('books')}>
+            <Icon name="book" size={18} /> Books <span className="count">{books?.length ?? 0}</span>
+          </button>
+          <button role="tab" className={tab === 'epubs' ? 'on' : ''} onClick={() => setTab('epubs')}>
+            <Icon name="download" size={18} /> EPUB files <span className="count">{epubs.length}</span>
+          </button>
+        </div>
+
+        {tab === 'epubs' && (
+          <section className="epub-list">
+            <p className="muted small epub-intro">Every document you import is converted into an EPUB file that is kept here, inside the app. Save a copy to your device or send it to another app (Google Drive, email, Kindle…).</p>
+            {books?.length === 0 && <p className="muted pad">No EPUB files yet. Import a document first.</p>}
+            {books?.map((b) => {
+              const e = epubs.find((x) => x.bookId === b.id);
+              return (
+                <div key={b.id} className="epub-row">
+                  <div className="epub-icon">EPUB</div>
+                  <div className="epub-info" onClick={() => onOpen(b)}>
+                    <strong>{e?.fileName ?? `${b.title}.epub`}</strong>
+                    <span className="muted small">{e ? `${fmtBytes(e.size)} · created ${new Date(e.createdAt).toLocaleDateString()} · from ${b.sourceName}` : making === b.id ? 'Creating EPUB…' : 'Waiting to be created…'}</span>
+                  </div>
+                  <div className="epub-actions">
+                    <button className="btn small" disabled={!e} onClick={() => exportBook(b, 'save')}>
+                      <Icon name="download" size={16} /> Save
+                    </button>
+                    <button className="btn small primary" disabled={!e} onClick={() => exportBook(b, 'share')}>
+                      <Icon name="upload" size={16} /> Export
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        )}
+
+        {tab === 'books' && (
+        <>
         <div className="lib-toolbar">
           <div className="seg" role="tablist" aria-label="Sort">
             {(['recent', 'title', 'author', 'added'] as Sort[]).map((s) => (
@@ -314,7 +386,7 @@ export function Library({ onOpen }: { onOpen: (book: BookMeta) => void }) {
           </section>
         )}
 
-        <section className={view === 'grid' ? 'grid' : 'list'}>
+        <section className={view === 'grid' ? 'grid' : 'list'} style={tab === 'books' ? undefined : { display: 'none' }}>
           {shown.map((b) => (
             <article key={b.id} className="book" onClick={() => onOpen(b)} onContextMenu={(e) => (e.preventDefault(), setMenu(b))}>
               <Cover book={b} />
@@ -323,6 +395,7 @@ export function Library({ onOpen }: { onOpen: (book: BookMeta) => void }) {
                 <div className="muted small book-sub">
                   {b.author ? `${b.author} · ` : ''}
                   {b.format.toUpperCase()} · {fmtBytes(b.size)}
+                  {epubs.some((e) => e.bookId === b.id) ? ' · EPUB ✓' : ''}
                 </div>
                 <div className="progress-row">
                   <div className="bar thin">
@@ -344,6 +417,9 @@ export function Library({ onOpen }: { onOpen: (book: BookMeta) => void }) {
             </article>
           ))}
         </section>
+
+        </>
+        )}
 
         <footer className="storage">
           <div className="storage-head">
@@ -368,8 +444,11 @@ export function Library({ onOpen }: { onOpen: (book: BookMeta) => void }) {
             <button className="menu-item" onClick={() => (setMenu(null), onOpen(menu))}>
               <Icon name="book" /> Read
             </button>
-            <button className="menu-item" onClick={() => exportBook(menu)}>
-              <Icon name="download" /> Save as EPUB
+            <button className="menu-item" onClick={() => exportBook(menu, 'save')}>
+              <Icon name="download" /> Save EPUB to device
+            </button>
+            <button className="menu-item" onClick={() => exportBook(menu, 'share')}>
+              <Icon name="upload" /> Export / share EPUB to…
             </button>
             <button className="menu-item" onClick={() => rename(menu)}>
               <Icon name="edit" /> Rename

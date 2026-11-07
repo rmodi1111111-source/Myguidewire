@@ -6,7 +6,7 @@ import type { BookMeta, Resource } from './types';
  * chapter it is showing (plus neighbours) — never the whole book at once.
  */
 const DB_NAME = 'local-reader';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -23,6 +23,7 @@ function open(): Promise<IDBDatabase> {
         s.createIndex('bookId', 'bookId');
       }
       if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+      if (!db.objectStoreNames.contains('epubs')) db.createObjectStore('epubs', { keyPath: 'bookId' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -99,8 +100,9 @@ export async function getBookResources(bookId: string): Promise<Resource[]> {
 
 export async function deleteBook(book: BookMeta): Promise<void> {
   const db = await open();
-  const tx = db.transaction(['books', 'chapters', 'resources'], 'readwrite');
+  const tx = db.transaction(['books', 'chapters', 'resources', 'epubs'], 'readwrite');
   tx.objectStore('books').delete(book.id);
+  tx.objectStore('epubs').delete(book.id);
   const cs = tx.objectStore('chapters');
   for (let i = 0; i < book.chapters.length; i++) cs.delete(chapterKey(book.id, i));
   const rs = tx.objectStore('resources');
@@ -154,4 +156,32 @@ export async function requestPersistence(): Promise<boolean> {
     /* ignore */
   }
   return false;
+}
+
+/** An EPUB file kept inside the app for each book. */
+export interface EpubFile {
+  bookId: string;
+  fileName: string;
+  blob: Blob;
+  size: number;
+  createdAt: number;
+}
+
+export async function putEpub(f: EpubFile): Promise<void> {
+  const db = await open();
+  const tx = db.transaction('epubs', 'readwrite');
+  tx.objectStore('epubs').put(f);
+  await done(tx);
+}
+
+export async function getEpub(bookId: string): Promise<EpubFile | undefined> {
+  const db = await open();
+  return req(db.transaction('epubs').objectStore('epubs').get(bookId) as IDBRequest<EpubFile | undefined>);
+}
+
+/** Metadata of all stored EPUB files (without loading their contents into the UI). */
+export async function listEpubs(): Promise<Omit<EpubFile, 'blob'>[]> {
+  const db = await open();
+  const all = await req(db.transaction('epubs').objectStore('epubs').getAll() as IDBRequest<EpubFile[]>);
+  return all.map(({ blob: _b, ...rest }) => rest);
 }

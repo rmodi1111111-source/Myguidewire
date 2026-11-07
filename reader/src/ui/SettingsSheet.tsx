@@ -129,6 +129,7 @@ export function SettingsSheet({ settings: s, onChange, onClose }: { settings: Re
                 value={s.animation}
                 onChange={(v) => set('animation', v)}
                 options={[
+                  { v: 'curl', label: 'Page curl' },
                   { v: 'slide', label: 'Slide' },
                   { v: 'flip', label: 'Page flip' },
                   { v: 'fade', label: 'Fade' },

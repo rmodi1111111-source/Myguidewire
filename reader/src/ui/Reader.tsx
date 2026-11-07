@@ -31,6 +31,21 @@ export function Reader({
   const [image, setImage] = useState<{ src: string; alt: string } | null>(null);
   const [busy, setBusy] = useState(true);
   const [scrub, setScrub] = useState<number | null>(null);
+  const [hint, setHint] = useState(() => {
+    try {
+      return localStorage.getItem('reader.hintSeen') !== '1';
+    } catch {
+      return false;
+    }
+  });
+  const dismissHint = () => {
+    setHint(false);
+    try {
+      localStorage.setItem('reader.hintSeen', '1');
+    } catch {
+      /* ignore */
+    }
+  };
   const saveTimer = useRef(0);
 
   const persist = useCallback((b: BookMeta) => {
@@ -184,7 +199,39 @@ export function Reader({
         </button>
       </header>
 
+      <div className="reader-progress" aria-hidden="true">
+        <span style={{ width: `${pctNow * 100}%` }} />
+      </div>
+
+      {settings.layout === 'scroll' && <ScrollHandle fraction={pctNow} onScrub={setScrub} onCommit={(f) => engineRef.current?.goToFraction(f)} />}
+
       <footer className="reader-bottom">
+        <div className="quick-row">
+          <div className="seg">
+            <button className={settings.layout === 'paged' ? 'on' : ''} onClick={() => onSettings({ ...settings, layout: 'paged' })}>
+              Pages
+            </button>
+            <button className={settings.layout === 'scroll' ? 'on' : ''} onClick={() => onSettings({ ...settings, layout: 'scroll' })}>
+              Scroll
+            </button>
+          </div>
+          {settings.layout === 'paged' && (
+            <div className="seg">
+              {(
+                [
+                  ['curl', 'Curl'],
+                  ['slide', 'Slide'],
+                  ['flip', 'Flip'],
+                  ['none', 'None'],
+                ] as const
+              ).map(([v, label]) => (
+                <button key={v} className={settings.animation === v ? 'on' : ''} onClick={() => onSettings({ ...settings, animation: v })}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {preview && (
           <div className="scrub-preview" style={{ left: `calc(${pctNow * 100}% )` }}>
             <div className="scrub-title">{preview.title}</div>
@@ -226,6 +273,26 @@ export function Reader({
       {panel === 'settings' && <SettingsSheet settings={settings} onChange={onSettings} onClose={() => setPanel(null)} />}
       {panel === 'toc' && <TocPanel book={book} current={loc?.chapter ?? 0} onGo={goTo} onClose={() => setPanel(null)} onDeleteBookmark={(id) => persist({ ...bookRef.current, bookmarks: bookRef.current.bookmarks.filter((b) => b.id !== id) })} />}
       {panel === 'search' && <SearchPanel book={book} onGo={goTo} onClose={() => setPanel(null)} />}
+      {hint && (
+        <div className="hint" onClick={dismissHint}>
+          <div className="hint-zones">
+            <div>
+              <strong>‹</strong>
+              <span>Tap or swipe here for the previous page</span>
+            </div>
+            <div>
+              <strong>☰</strong>
+              <span>Tap the middle for the menu: Pages / Scroll, page curl, text size, contents</span>
+            </div>
+            <div>
+              <strong>›</strong>
+              <span>Tap here, or drag the page corner, to turn the page</span>
+            </div>
+          </div>
+          <p>Tap any picture to open it full screen and pinch to zoom.</p>
+          <button className="btn primary">Got it</button>
+        </div>
+      )}
       {image && <ImageViewer src={image.src} alt={image.alt} onClose={() => setImage(null)} />}
     </div>
   );
@@ -365,6 +432,50 @@ function SearchPanel({ book, onGo, onClose }: { book: BookMeta; onGo: (p: Positi
           ))}
         </div>
       </aside>
+    </div>
+  );
+}
+
+/** Draggable scroll handle on the right edge in scroll mode (fast scroll through the whole book). */
+function ScrollHandle({ fraction, onScrub, onCommit }: { fraction: number; onScrub: (f: number | null) => void; onCommit: (f: number) => void }) {
+  const track = useRef<HTMLDivElement>(null);
+  const [drag, setDrag] = useState<number | null>(null);
+  const f = drag ?? fraction;
+  const at = (clientY: number) => {
+    const r = track.current!.getBoundingClientRect();
+    return Math.min(Math.max((clientY - r.top) / r.height, 0), 1);
+  };
+  return (
+    <div className="scroll-track" ref={track}>
+      <div
+        className={`scroll-thumb ${drag !== null ? 'active' : ''}`}
+        style={{ top: `calc(${f * 100}% - ${f * 56}px)` }}
+        role="slider"
+        aria-label="Scroll through book"
+        aria-valuenow={Math.round(f * 100)}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          const v = at(e.clientY);
+          setDrag(v);
+          onScrub(v);
+        }}
+        onPointerMove={(e) => {
+          if (drag === null) return;
+          const v = at(e.clientY);
+          setDrag(v);
+          onScrub(v);
+        }}
+        onPointerUp={(e) => {
+          if (drag === null) return;
+          const v = at(e.clientY);
+          setDrag(null);
+          onScrub(null);
+          onCommit(v);
+        }}
+      >
+        <span>{Math.round(f * 100)}%</span>
+      </div>
     </div>
   );
 }

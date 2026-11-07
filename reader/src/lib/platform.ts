@@ -11,15 +11,41 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-/** Save or share a generated file (EPUB export). */
-export async function saveFile(blob: Blob, filename: string): Promise<void> {
+/**
+ * Save a file to a place the user can find outside the app.
+ * Android / iOS: Documents/LocalReader (visible in the Files app).
+ * Desktop browsers / Windows app: a "Save as" dialog where supported, otherwise Downloads.
+ * Returns a human-readable description of where it went.
+ */
+export async function saveToDevice(blob: Blob, filename: string): Promise<string> {
   if (isNative()) {
     const { Filesystem, Directory } = await import('@capacitor/filesystem');
-    const { Share } = await import('@capacitor/share');
     const data = await blobToBase64(blob);
-    const res = await Filesystem.writeFile({ path: filename, data, directory: Directory.Cache });
-    await Share.share({ title: filename, url: res.uri, dialogTitle: 'Save or send EPUB' });
-    return;
+    try {
+      try {
+        await Filesystem.requestPermissions(); // only asks on Android 9 and older
+      } catch {
+        /* not needed */
+      }
+      await Filesystem.writeFile({ path: `LocalReader/${filename}`, data, directory: Directory.Documents, recursive: true });
+      return 'Documents › LocalReader';
+    } catch {
+      // Some devices block the shared Documents folder: fall back to the share sheet.
+      await shareFile(blob, filename);
+      return 'the place you picked';
+    }
+  }
+  const picker = (window as any).showSaveFilePicker;
+  if (picker) {
+    try {
+      const handle = await picker({ suggestedName: filename, types: [{ description: 'EPUB book', accept: { 'application/epub+zip': ['.epub'] } }] });
+      const w = await handle.createWritable();
+      await w.write(blob);
+      await w.close();
+      return handle.name;
+    } catch (e) {
+      if ((e as Error)?.name === 'AbortError') throw e;
+    }
   }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -29,7 +55,31 @@ export async function saveFile(blob: Blob, filename: string): Promise<void> {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return 'your Downloads folder';
 }
+
+/** Send a file to another app (Drive, email, Files, Kindle, WhatsApp…). */
+export async function shareFile(blob: Blob, filename: string): Promise<void> {
+  if (isNative()) {
+    const { Filesystem, Directory } = await import('@capacitor/filesystem');
+    const { Share } = await import('@capacitor/share');
+    const data = await blobToBase64(blob);
+    const res = await Filesystem.writeFile({ path: filename, data, directory: Directory.Cache });
+    await Share.share({ title: filename, files: [res.uri], dialogTitle: 'Export EPUB to…' });
+    return;
+  }
+  const file = new File([blob], filename, { type: 'application/epub+zip' });
+  if (navigator.canShare?.({ files: [file] })) {
+    await navigator.share({ files: [file], title: filename });
+    return;
+  }
+  await saveToDevice(blob, filename);
+}
+
+/** Back-compat helper. */
+export const saveFile = async (blob: Blob, filename: string) => {
+  await saveToDevice(blob, filename);
+};
 
 type BackHandler = () => boolean;
 const backHandlers: BackHandler[] = [];

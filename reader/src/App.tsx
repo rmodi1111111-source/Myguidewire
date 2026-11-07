@@ -7,7 +7,13 @@ import { Reader } from './ui/Reader';
 
 const loadSettings = (): ReaderSettings => {
   try {
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem('reader.settings') || '{}') };
+    const saved = JSON.parse(localStorage.getItem('reader.settings') || '{}');
+    // v3.1: page curl became the default page turn.
+    if (localStorage.getItem('reader.settingsVersion') !== '2') {
+      saved.animation = 'curl';
+      localStorage.setItem('reader.settingsVersion', '2');
+    }
+    return { ...DEFAULT_SETTINGS, ...saved };
   } catch {
     return DEFAULT_SETTINGS;
   }

@@ -98,11 +98,11 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: reader-build-${{ github.run_number }}
-          name: Local Reader 3.0 (build ${{ github.run_number }})
+          name: Local Reader 3.1 (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
           prerelease: true
           body: |
-            Local Reader 3.0 — built from `${{ github.ref_name }}`.
+            Local Reader 3.1 — built from `${{ github.ref_name }}`.
 
             * **Android**: `LocalReader.apk` — open on your phone and install (allow "install unknown apps"). Uninstall the old Local Reader first if Android says the package conflicts.
             * **Windows**: `Local Reader Setup *.exe` (installer) or `LocalReader-*-portable.exe` (no install).

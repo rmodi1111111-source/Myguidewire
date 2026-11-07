@@ -108,6 +108,9 @@ export async function importFile(file: File, onProgress: ImportProgress, opts: I
     bookmarks: [],
   };
   await saveBook(book, chapters, resources);
+  onProgress(0.98, 'Creating EPUB file…');
+  const { ensureEpub } = await import('../epubExport');
+  await ensureEpub(book, fmt === 'epub' ? file : undefined);
   onProgress(1, 'Done');
   return book;
 }

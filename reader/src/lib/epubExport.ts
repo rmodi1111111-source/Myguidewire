@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import type { BookMeta } from './types';
-import { getBookResources, getChapter } from './db';
+import { getBookResources, getChapter, getEpub, putBook, putEpub, type EpubFile } from './db';
 import { escapeHtml } from './import/builder';
 
 const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg', 'image/bmp': 'bmp', 'image/avif': 'avif' };
@@ -78,4 +78,20 @@ ${imgItems.join('\n')}
 <spine>${spine.join('')}</spine>
 </package>`);
   return zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip', compression: 'DEFLATE' });
+}
+
+export const epubFileName = (book: BookMeta) => `${book.title.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || 'book'}.epub`;
+
+/**
+ * Make sure the book has an EPUB file stored in the app; create it if missing.
+ * For imported .epub files the original file is kept.
+ */
+export async function ensureEpub(book: BookMeta, original?: Blob): Promise<EpubFile> {
+  const have = await getEpub(book.id);
+  if (have) return have;
+  const blob = original ? new Blob([original], { type: 'application/epub+zip' }) : await exportEpub(book);
+  const file: EpubFile = { bookId: book.id, fileName: epubFileName(book), blob, size: blob.size, createdAt: Date.now() };
+  await putEpub(file);
+  await putBook({ ...book, epubSize: blob.size, size: book.size + blob.size });
+  return file;
 }

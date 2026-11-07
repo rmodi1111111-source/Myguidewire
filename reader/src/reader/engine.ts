@@ -57,7 +57,11 @@ type Transition = {
   dir: 1 | -1;
   from: { ch: number; page: number };
   to: { ch: number; page: number };
-  kind: 'slide' | 'flip' | 'fade';
+  kind: 'slide' | 'flip' | 'fade' | 'curl';
+  /** Page curl: which corner is being lifted, and the current corner position. */
+  corner: 'top' | 'bottom';
+  point?: { x: number; y: number };
+  raf?: number;
   snap: HTMLElement;
   realSwitchedAtStart: boolean;
   progress: number;
@@ -76,6 +80,10 @@ export class ReaderEngine {
   private stage!: HTMLElement;
   private snaps!: HTMLElement;
   private shade!: HTMLElement;
+  private curlShadow!: HTMLElement;
+  private curlFlap!: HTMLElement;
+  private curlFlapBand!: HTMLElement;
+  private curlShadowBand!: HTMLElement;
   private scroller?: HTMLElement;
   private frames = new Map<number, Frame>();
   private loading = new Map<number, Promise<Frame>>();
@@ -92,12 +100,12 @@ export class ReaderEngine {
   private lastSize = '';
   private generation = 0;
   private pendingTap = 0;
-  private lastImgTap: { el: Element; t: number } | null = null;
   private wheelAcc = 0;
   private wheelLock = 0;
   private scrollRaf = 0;
   private scrollBusy = false;
   private highlight?: { term: string; ch: number };
+  private dragging = false;
 
   constructor(host: HTMLElement, book: BookMeta, settings: ReaderSettings, cb: EngineCallbacks) {
     this.host = host;
@@ -292,7 +300,18 @@ export class ReaderEngine {
     this.snaps.className = 'rd-snaps';
     this.shade = document.createElement('div');
     this.shade.className = 'rd-shade';
-    this.host.append(this.stage, this.snaps, this.shade);
+    // Page curl layers: a shadow cast on the revealed page, and the folded-back flap.
+    this.curlShadow = document.createElement('div');
+    this.curlShadow.className = 'rd-curl-shadow';
+    this.curlShadowBand = document.createElement('div');
+    this.curlShadowBand.className = 'rd-curl-shadow-band';
+    this.curlShadow.append(this.curlShadowBand);
+    this.curlFlap = document.createElement('div');
+    this.curlFlap.className = 'rd-curl-flap';
+    this.curlFlapBand = document.createElement('div');
+    this.curlFlapBand.className = 'rd-curl-flap-band';
+    this.curlFlap.append(this.curlFlapBand);
+    this.host.append(this.stage, this.shade, this.curlShadow, this.snaps, this.curlFlap);
 
     const f = await this.loadFrame(ch);
     if (gen !== this.generation) return;
@@ -546,7 +565,7 @@ export class ReaderEngine {
       return;
     }
     const t = this.beginTransition(dir, to);
-    this.animateTransition(t, 1, anim === 'fade' ? 220 : anim === 'flip' ? 420 : 300);
+    this.animateTransition(t, 1, anim === 'fade' ? 220 : anim === 'flip' ? 420 : anim === 'curl' ? 560 : 300);
   }
 
   private bump(dir: 1 | -1) {
@@ -558,20 +577,25 @@ export class ReaderEngine {
     );
   }
 
-  private beginTransition(dir: 1 | -1, to: { ch: number; page: number }): Transition {
+  private beginTransition(dir: 1 | -1, to: { ch: number; page: number }, corner: 'top' | 'bottom' = 'bottom'): Transition {
     const kind = this.settings.animation === 'none' ? 'slide' : this.settings.animation;
     const from = { ch: this.ch, page: this.page };
-    // Flip backwards: the previous page swings back in over the current one.
-    const snapFrame = kind === 'flip' && dir === -1 ? this.frames.get(to.ch)! : this.frames.get(from.ch)!;
-    const snapPage = kind === 'flip' && dir === -1 ? to.page : from.page;
+    // Flip / curl backwards: the previous page comes back over the current one.
+    const overlayTarget = (kind === 'flip' || kind === 'curl') && dir === -1;
+    const snapFrame = overlayTarget ? this.frames.get(to.ch)! : this.frames.get(from.ch)!;
+    const snapPage = overlayTarget ? to.page : from.page;
     const snap = this.ensureSnap(snapFrame);
     snapFrame.snapContent!.style.transform = `translate3d(${-snapPage * this.geo.W}px,0,0)`;
     for (const f of this.frames.values()) if (f.snap && f.snap !== snap) f.snap.style.visibility = 'hidden';
     snap.style.visibility = 'visible';
     snap.className = `rd-snap rd-snap-${kind} ${dir === 1 ? 'fwd' : 'back'}`;
-    const realSwitchedAtStart = !(kind === 'flip' && dir === -1);
+    const realSwitchedAtStart = !overlayTarget;
     if (realSwitchedAtStart) this.show(to.ch, to.page);
-    const t: Transition = { dir, from, to, kind, snap, realSwitchedAtStart, progress: 0, anims: [] };
+    const t: Transition = { dir, from, to, kind, corner, snap, realSwitchedAtStart, progress: 0, anims: [] };
+    if (kind === 'curl') {
+      this.curlFlap.style.display = 'block';
+      this.curlShadow.style.display = 'block';
+    }
     this.trans = t;
     this.applyProgress(t, 0);
     return t;
@@ -607,6 +631,10 @@ export class ReaderEngine {
 
   private applyProgress(t: Transition, p: number) {
     t.progress = p;
+    if (t.kind === 'curl') {
+      this.renderCurl(t, this.curlPathPoint(t, p));
+      return;
+    }
     const s = this.styles(t, p);
     t.snap.style.transform = s.snap.transform;
     t.snap.style.opacity = s.snap.opacity;
@@ -614,7 +642,132 @@ export class ReaderEngine {
     this.shade.style.opacity = s.shade.opacity;
   }
 
+  // ------------------------------------------------------------------ page curl
+
+  /** Corner position along the automatic (tap) curl path; p = how far the turn has progressed. */
+  private curlPathPoint(t: Transition, p: number) {
+    const { W, H } = this.geo;
+    const q = t.dir === 1 ? p : 1 - p; // q: how far the front page has been turned away
+    const cy = t.corner === 'bottom' ? H : 0;
+    const lift = Math.sin(q * Math.PI) * H * 0.16 * (t.corner === 'bottom' ? -1 : 1);
+    return { x: W - q * 2 * W, y: cy + lift };
+  }
+
+  /** Corner position when the turn is finished (1) or cancelled (0). */
+  private curlEndPoint(t: Transition, target: 0 | 1) {
+    const { W, H } = this.geo;
+    const turnedAway = (t.dir === 1) === (target === 1);
+    return { x: turnedAway ? -W * 1.02 : W, y: t.corner === 'bottom' ? H : 0 };
+  }
+
+  /**
+   * Draw the curl for a lifted corner at point P. The fold line is the
+   * perpendicular bisector of the page corner and P: the front page is clipped
+   * to one side of it, and a paper-coloured flap (the back of the page) is the
+   * other side reflected across the fold, with shading along the crease.
+   */
+  private renderCurl(t: Transition, P: { x: number; y: number }) {
+    const { W, H } = this.geo;
+    t.point = P;
+    const C = { x: W, y: t.corner === 'bottom' ? H : 0 };
+    const dx = C.x - P.x;
+    const dy = C.y - P.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1) {
+      t.snap.style.clipPath = '';
+      this.curlFlap.style.visibility = 'hidden';
+      this.curlShadow.style.visibility = 'hidden';
+      return;
+    }
+    const nx = dx / len;
+    const ny = dy / len;
+    const mx = (C.x + P.x) / 2;
+    const my = (C.y + P.y) / 2;
+    const side = (x: number, y: number) => (x - mx) * nx + (y - my) * ny;
+    const rect = [
+      [0, 0],
+      [W, 0],
+      [W, H],
+      [0, H],
+    ];
+    const clip = (keepFront: boolean) => {
+      const out: number[][] = [];
+      for (let i = 0; i < rect.length; i++) {
+        const a = rect[i];
+        const b = rect[(i + 1) % rect.length];
+        const sa = side(a[0], a[1]);
+        const sb = side(b[0], b[1]);
+        const ina = keepFront ? sa <= 0 : sa >= 0;
+        const inb = keepFront ? sb <= 0 : sb >= 0;
+        if (ina) out.push(a);
+        if (ina !== inb) {
+          const k = sa / (sa - sb);
+          out.push([a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k]);
+        }
+      }
+      return out;
+    };
+    const poly = (pts: number[][]) => (pts.length ? `polygon(${pts.map((q) => `${q[0].toFixed(1)}px ${q[1].toFixed(1)}px`).join(',')})` : 'polygon(0 0,0 0,0 0)');
+    const front = clip(true);
+    const turned = clip(false);
+    t.snap.style.clipPath = poly(front);
+    t.snap.style.transform = 'none';
+    // Flap = turned region reflected across the fold line.
+    const d2 = 2 * (mx * nx + my * ny);
+    const a = 1 - 2 * nx * nx;
+    const b = -2 * nx * ny;
+    const d = 1 - 2 * ny * ny;
+    this.curlFlap.style.visibility = 'visible';
+    this.curlFlap.style.clipPath = poly(turned);
+    this.curlFlap.style.transform = `matrix(${a},${b},${b},${d},${d2 * nx},${d2 * ny})`;
+    // Shading bands along the crease (in un-reflected coordinates both start at the fold).
+    const diag = Math.hypot(W, H) * 1.2;
+    const angle = Math.atan2(-nx, ny);
+    const bandStyle = (el: HTMLElement, width: number) => {
+      el.style.width = `${diag * 2}px`;
+      el.style.height = `${width}px`;
+      el.style.transform = `translate(${mx - diag}px, ${my}px) rotate(${angle}rad)`;
+      el.style.transformOrigin = `${diag}px 0`;
+    };
+    const turnedFrac = Math.min(len / (2 * W), 1);
+    bandStyle(this.curlFlapBand, Math.max(len / 2, 1));
+    bandStyle(this.curlShadowBand, Math.min(Math.max(len * 0.35, 12), 90));
+    this.curlShadow.style.visibility = 'visible';
+    this.curlShadow.style.opacity = String(Math.min(1, 0.35 + (1 - turnedFrac)));
+  }
+
+  private animateCurl(t: Transition, target: 0 | 1, duration: number) {
+    if (t.raf) cancelAnimationFrame(t.raf);
+    const fromPoint = t.point ?? this.curlPathPoint(t, t.progress);
+    const fromP = t.progress;
+    const auto = !t.point || (t.point && t.progress === 0 && target === 1 && !this.dragging);
+    const end = this.curlEndPoint(t, target);
+    const t0 = performance.now();
+    const ease = (x: number) => 1 - Math.pow(1 - x, 3);
+    const easeInOut = (x: number) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
+    const step = (now: number) => {
+      if (this.trans !== t) return;
+      const k = Math.min((now - t0) / duration, 1);
+      if (auto) {
+        const p = fromP + (target - fromP) * easeInOut(k);
+        t.progress = p;
+        this.renderCurl(t, this.curlPathPoint(t, p));
+      } else {
+        const e = ease(k);
+        t.progress = fromP + (target - fromP) * e;
+        this.renderCurl(t, { x: fromPoint.x + (end.x - fromPoint.x) * e, y: fromPoint.y + (end.y - fromPoint.y) * e });
+      }
+      if (k < 1) t.raf = requestAnimationFrame(step);
+      else this.endTransition(t, target === 1);
+    };
+    t.raf = requestAnimationFrame(step);
+  }
+
   private animateTransition(t: Transition, target: 0 | 1, duration: number, easing = EASE) {
+    if (t.kind === 'curl') {
+      this.animateCurl(t, target, duration);
+      return;
+    }
     for (const a of t.anims) a.cancel();
     const a = this.styles(t, t.progress);
     const b = this.styles(t, target);
@@ -634,9 +787,15 @@ export class ReaderEngine {
   private endTransition(t: Transition, committed: boolean) {
     for (const a of t.anims) a.cancel();
     t.anims = [];
+    if (t.raf) cancelAnimationFrame(t.raf);
     t.snap.style.visibility = 'hidden';
     t.snap.style.transform = '';
     t.snap.style.opacity = '';
+    t.snap.style.clipPath = '';
+    if (this.curlFlap) {
+      this.curlFlap.style.display = 'none';
+      this.curlShadow.style.display = 'none';
+    }
     this.stage.style.transform = '';
     this.shade.style.opacity = '0';
     if (committed) {
@@ -810,8 +969,20 @@ export class ReaderEngine {
     let start: { x: number; y: number; t: number; id: number; type: string } | null = null;
     let dragging = false;
     let samples: { x: number; t: number }[] = [];
+    const touches = new Map<number, Element | null>();
 
     host.addEventListener('pointerdown', (e) => {
+      touches.set(e.pointerId, e.target as Element);
+      // Pinch on a picture opens the zoom viewer.
+      if (touches.size === 2 && !dragging) {
+        const img = [...touches.values()].map((el) => el?.closest?.('img') as HTMLImageElement | null).find(Boolean);
+        if (img) {
+          start = null;
+          clearTimeout(this.pendingTap);
+          this.openImage(img);
+          return;
+        }
+      }
       if (e.button !== 0 || start) return;
       start = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId, type: e.pointerType };
       dragging = false;
@@ -843,26 +1014,41 @@ export class ReaderEngine {
         } catch {
           /* ignore */
         }
+        this.dragging = true;
+        const hr = host.getBoundingClientRect();
+        const corner = start.y - hr.top < hr.height * 0.45 ? 'top' : 'bottom';
         if (this.settings.animation === 'none') {
           this.beginTransition(dir, to);
           this.trans!.kind = 'slide';
-        } else this.beginTransition(dir, to);
+        } else this.beginTransition(dir, to, corner);
       }
       const t = this.trans;
       if (!t) return;
       const now = performance.now();
       samples.push({ x: e.clientX, t: now });
       if (samples.length > 6) samples.shift();
+      if (t.kind === 'curl') {
+        // The lifted corner follows the finger.
+        const { W, H } = this.geo;
+        const cy = t.corner === 'bottom' ? H : 0;
+        const x = t.dir === 1 ? Math.max(W + dx * 1.6, -W) : Math.min(-W + dx * 1.6, W);
+        const y = Math.min(Math.max(cy + dy * 0.75, -H * 0.4), H * 1.4);
+        t.progress = t.dir === 1 ? (W - x) / (2 * W) : (x + W) / (2 * W);
+        this.renderCurl(t, { x, y });
+        return;
+      }
       const p = Math.min(Math.max((-t.dir * dx) / this.geo.W, 0), 1);
       this.applyProgress(t, p);
     });
 
     const end = (e: PointerEvent) => {
+      touches.delete(e.pointerId);
       if (!start || e.pointerId !== start.id) return;
       const s = start;
       start = null;
       if (dragging) {
         dragging = false;
+        this.dragging = false;
         const t = this.trans;
         if (!t) return;
         const first = samples[0];
@@ -872,7 +1058,7 @@ export class ReaderEngine {
         const commit = e.type !== 'pointercancel' && (t.progress > 0.35 || towards > 0.35) && towards > -0.2;
         const remaining = commit ? 1 - t.progress : t.progress;
         const speed = Math.max(Math.abs(v), 1.4);
-        const duration = Math.min(Math.max((remaining * this.geo.W) / speed, 120), 340);
+        const duration = t.kind === 'curl' ? Math.min(Math.max((remaining * 2 * this.geo.W) / speed, 180), 420) : Math.min(Math.max((remaining * this.geo.W) / speed, 120), 340);
         this.animateTransition(t, commit ? 1 : 0, duration, 'cubic-bezier(0.2, 0.7, 0.3, 1)');
         return;
       }
@@ -918,22 +1104,23 @@ export class ReaderEngine {
   }
 
   private handleTap(e: PointerEvent) {
+    const r = this.host.getBoundingClientRect();
+    // The top strip of the screen always toggles the menus.
+    if (e.clientY - r.top < Math.min(r.height * 0.1, 80)) {
+      this.cb.onTapCenter();
+      return;
+    }
     const img = (e.target as Element).closest?.('img') as HTMLImageElement | null;
-    const now = performance.now();
     if (img) {
-      // Double-tap a picture to zoom; a single tap still turns pages / shows menus.
-      if (this.lastImgTap && this.lastImgTap.el === img && now - this.lastImgTap.t < 350) {
+      const fullPage = !!img.closest('figure.page-image');
+      const x = (e.clientX - r.left) / r.width;
+      // Tap a picture to pop it out. On full-page images (scanned PDF pages) the
+      // left / right edges still turn pages and the middle opens the zoom view.
+      if (!fullPage || this.isScroll || (x >= 0.28 && x <= 0.72)) {
         clearTimeout(this.pendingTap);
-        this.lastImgTap = null;
         this.openImage(img);
         return;
       }
-      this.lastImgTap = { el: img, t: now };
-      const x = e.clientX;
-      clearTimeout(this.pendingTap);
-      if (e.pointerType === 'mouse') return; // mouse uses dblclick; single click on a picture does nothing
-      this.pendingTap = window.setTimeout(() => this.zoneTap(x), 300);
-      return;
     }
     this.zoneTap(e.clientX);
   }
