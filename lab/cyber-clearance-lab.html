@@ -1,0 +1,1081 @@
+<title>Cyber Clearance Event Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a three-pane control room — submission builder (left), live architecture map (centre), inspector (right), with a data drawer under the map. Built for 1920–2560px monitors; stacks on narrow screens. */
+:root{
+  --bg:#e9edf2; --panel:#ffffff; --panel-2:#f4f6f9; --sunk:#eef1f5;
+  --ink:#122033; --muted:#566578; --faint:#8a97a7; --line:#cfd7e1; --grid:#e1e6ec;
+  --accent:#1f4fbf; --accent-soft:rgba(31,79,191,.10);
+  --zone:#f7f9fb; --zone-kafka:#fff6ee; --zone-vnet:#f1f6fd; --zone-sub:#ffffff;
+  --c-kafka:#c2410c; --c-sb:#0369a1; --c-http:#0f766e; --c-pg:#4338ca; --c-es:#a16207;
+  --c-sr:#be185d; --c-cdc:#b91c1c; --c-snow:#0e7490; --c-logic:#475569; --c-ext:#334155;
+  --good:#15803d; --warn:#b45309; --bad:#b91c1c;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0b121b; --panel:#111b27; --panel-2:#152131; --sunk:#0e1722;
+  --ink:#e3eaf2; --muted:#93a3b6; --faint:#66778b; --line:#26364a; --grid:#1a2736;
+  --accent:#7aa2ff; --accent-soft:rgba(122,162,255,.14);
+  --zone:#0f1924; --zone-kafka:#1a140e; --zone-vnet:#0e1825; --zone-sub:#111c29;
+  --c-kafka:#fb923c; --c-sb:#38bdf8; --c-http:#2dd4bf; --c-pg:#a5b4fc; --c-es:#facc15;
+  --c-sr:#f472b6; --c-cdc:#f87171; --c-snow:#67e8f9; --c-logic:#a3b1c2; --c-ext:#cbd5e1;
+  --good:#4ade80; --warn:#fbbf24; --bad:#f87171; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0b121b; --panel:#111b27; --panel-2:#152131; --sunk:#0e1722;
+  --ink:#e3eaf2; --muted:#93a3b6; --faint:#66778b; --line:#26364a; --grid:#1a2736;
+  --accent:#7aa2ff; --accent-soft:rgba(122,162,255,.14);
+  --zone:#0f1924; --zone-kafka:#1a140e; --zone-vnet:#0e1825; --zone-sub:#111c29;
+  --c-kafka:#fb923c; --c-sb:#38bdf8; --c-http:#2dd4bf; --c-pg:#a5b4fc; --c-es:#facc15;
+  --c-sr:#f472b6; --c-cdc:#f87171; --c-snow:#67e8f9; --c-logic:#a3b1c2; --c-ext:#cbd5e1;
+  --good:#4ade80; --warn:#fbbf24; --bad:#f87171; color-scheme:dark }
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px;box-sizing:border-box}
+*,*::before,*::after{box-sizing:border-box}
+button,input,select{font:inherit;color:inherit}
+h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance}
+.mono{font-family:var(--f-mono)}
+.app{display:grid;gap:12px;grid-template-columns:340px minmax(0,1fr) 440px;grid-template-rows:auto minmax(0,1fr) 330px;
+  grid-template-areas:"head head head" "left map insp" "left drawer drawer";height:100%;min-height:860px}
+header.top{grid-area:head;display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px}
+.brand{display:flex;align-items:baseline;gap:12px;min-width:0}
+.brand h1{font-size:26px;font-weight:700;letter-spacing:-.01em}
+.brand .tag{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-left:auto}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:18px;height:3px;border-radius:2px;display:inline-block}
+.themebtn{border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-width:0;min-height:0;display:flex;flex-direction:column}
+.panel > .ph{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.ph h2{font-size:15px;font-weight:600;letter-spacing:.02em;text-transform:uppercase}
+.ph .sub{font-size:12px;color:var(--muted)}
+.scroll{overflow:auto;min-height:0}
+
+/* left: builder */
+.left{grid-area:left}
+.builder{padding:12px 14px;display:flex;flex-direction:column;gap:12px}
+fieldset{border:1px solid var(--line);border-radius:8px;padding:10px 10px 12px;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+legend{font-family:var(--f-display);font-weight:600;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:0 4px}
+label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--muted);min-width:0}
+label.full{grid-column:1/-1}
+input,select{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:5px 7px;font-size:13px;color:var(--ink);min-width:0;width:100%}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;grid-column:1/-1}
+.seg button{flex:1;border:0;background:var(--panel-2);padding:7px 6px;cursor:pointer;font-size:13px;font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.derived{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;border:1px solid var(--line);border-radius:999px;padding:2px 9px;background:var(--panel-2);white-space:nowrap}
+.chip b{font-weight:600}
+.chip.ok{border-color:color-mix(in srgb,var(--good) 45%,transparent);color:var(--good)}
+.chip.no{border-color:color-mix(in srgb,var(--bad) 45%,transparent);color:var(--bad)}
+.btn{border:1px solid var(--line);background:var(--panel-2);border-radius:7px;padding:7px 12px;cursor:pointer;font-weight:500;font-size:13px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.toggle{display:flex;flex-direction:row;align-items:center;gap:8px;font-size:12.5px;color:var(--ink)}
+.toggle input{width:auto}
+.queue{display:flex;flex-direction:column;gap:6px}
+.qitem{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel-2);cursor:pointer;text-align:left;display:grid;gap:2px}
+.qitem[aria-current="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.qitem .l1{display:flex;justify-content:space-between;gap:8px;font-weight:600;font-size:13px}
+.qitem .l2{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+
+/* map */
+.map{grid-area:map}
+.controls{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}
+.controls .ctr{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.controls input[type=range]{width:110px;padding:0}
+.narr{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel-2);min-height:74px}
+.narr .num{grid-row:1/3;font-family:var(--f-display);font-size:34px;font-weight:700;line-height:1;color:var(--accent);font-variant-numeric:tabular-nums;min-width:56px}
+.narr .ttl{font-family:var(--f-display);font-size:18px;font-weight:600}
+.narr .txt{font-size:13.5px;color:var(--muted);max-width:110ch}
+.svgwrap{flex:1;min-height:0;overflow:auto;padding:8px;display:flex}
+svg.arch{width:100%;height:100%;min-height:560px;display:block;min-width:900px}
+.zone{fill:var(--zone);stroke:var(--line);stroke-width:1}
+.zone.kafka{fill:var(--zone-kafka);stroke:color-mix(in srgb,var(--c-kafka) 40%,var(--line))}
+.zone.vnet{fill:var(--zone-vnet);stroke:color-mix(in srgb,var(--c-sb) 45%,var(--line));stroke-width:1.5}
+.zone.subnet{fill:var(--zone-sub);stroke:var(--line);stroke-dasharray:5 4}
+.zone.proc{fill:none;stroke:var(--faint);stroke-dasharray:3 4;stroke-width:1.25}
+.zl{font-family:var(--f-display);font-size:13px;font-weight:600;fill:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.zs{font-family:var(--f-mono);font-size:10.5px;fill:var(--faint)}
+.node rect.box{fill:var(--panel);stroke:var(--line);stroke-width:1.25;transition:stroke .2s,fill .2s}
+.node .t{font-family:var(--f-body);font-size:13.5px;font-weight:600;fill:var(--ink)}
+.node .s{font-family:var(--f-mono);font-size:10.5px;fill:var(--muted)}
+.node .stripe{stroke-width:4}
+.node{cursor:pointer}
+.node:hover rect.box{stroke:var(--accent)}
+.node.sel rect.box{stroke:var(--accent);stroke-width:2.5}
+.node.on rect.box{stroke-width:2.5}
+.node.dim{opacity:.55}
+.node.out rect.box{stroke-dasharray:6 4}
+.badge rect{fill:var(--accent)}
+.badge text{font-family:var(--f-mono);font-size:10.5px;fill:#fff;font-weight:600}
+.inner rect{fill:var(--panel-2);stroke:var(--line)}
+.inner text{font-family:var(--f-body);font-size:11.5px;fill:var(--ink)}
+.inner .m{font-family:var(--f-mono);font-size:10.5px;fill:var(--muted)}
+.inner.on rect{stroke:var(--accent);stroke-width:2;fill:var(--accent-soft)}
+.inner.done rect{stroke:color-mix(in srgb,var(--good) 60%,var(--line))}
+.flight{fill:none;stroke-width:2.5;stroke-linecap:round}
+.trail{fill:none;stroke-width:1.5;stroke-dasharray:4 5;opacity:.55}
+.pkt{stroke:var(--panel);stroke-width:2}
+.pktlabel{font-family:var(--f-mono);font-size:11px;font-weight:600}
+@keyframes pulse{0%{opacity:.9;r:8}100%{opacity:0;r:42}}
+
+/* inspector */
+.insp{grid-area:insp}
+.ibody{padding:12px 14px;display:flex;flex-direction:column;gap:12px}
+.chan{display:inline-flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:11px;font-weight:600;border-radius:4px;padding:2px 7px;color:#fff;text-transform:uppercase;letter-spacing:.04em}
+.kv{width:100%;border-collapse:collapse;font-size:12.5px}
+.kv th{text-align:left;font-weight:500;color:var(--muted);padding:4px 10px 4px 0;vertical-align:top;white-space:nowrap;width:1%}
+.kv td{padding:4px 0;font-family:var(--f-mono);font-size:12px;word-break:break-word}
+.kv tr+tr th,.kv tr+tr td{border-top:1px solid var(--grid)}
+pre.code{margin:0;background:var(--sunk);border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-family:var(--f-mono);font-size:11.5px;line-height:1.5;overflow:auto;max-height:420px;white-space:pre}
+.jk{color:var(--c-pg)} .js{color:var(--c-http)} .jn{color:var(--c-kafka)} .jl{color:var(--c-sr)}
+.sec{font-family:var(--f-display);font-size:12.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0}
+details summary{cursor:pointer;font-size:12.5px;color:var(--accent)}
+.note{border-left:3px solid var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent);padding:8px 10px;border-radius:0 6px 6px 0;font-size:12.5px}
+.note.teach{border-left-color:var(--accent);background:var(--accent-soft)}
+.ref{font-size:12px;color:var(--muted)}
+.fromto{display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap}
+.fromto b{font-weight:600}
+.eval td,.eval th{font-size:12px}
+.pass{color:var(--good);font-weight:600} .fail{color:var(--bad);font-weight:600}
+
+/* drawer */
+.drawer{grid-area:drawer}
+.tabs{display:flex;gap:2px;padding:0 10px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs button{border:0;background:none;padding:9px 12px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs .cnt{font-family:var(--f-mono);font-size:11px;color:var(--faint);margin-left:4px}
+.dbody{flex:1;min-height:0;overflow:auto;padding:10px 14px}
+table.grid{border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:tabular-nums}
+table.grid th{position:sticky;top:-10px;background:var(--panel);text-align:left;font-weight:600;color:var(--muted);font-size:11.5px;padding:6px 10px 6px 0;border-bottom:1px solid var(--line);white-space:nowrap}
+table.grid td{padding:5px 10px 5px 0;border-bottom:1px solid var(--grid);font-family:var(--f-mono);font-size:11.5px;vertical-align:top;max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+table.grid tr.cur td{background:var(--accent-soft)}
+table.grid tr.click{cursor:pointer}
+table.grid tr.click:hover td{background:var(--panel-2)}
+table.grid tr.future td{opacity:.45}
+.empty{color:var(--muted);font-size:13px;padding:14px 0}
+.bpmn{display:flex;flex-direction:column;gap:16px}
+.lane{display:flex;align-items:center;gap:0;flex-wrap:wrap;row-gap:10px}
+.lane h3{font-size:13px;width:190px;flex:none;color:var(--muted);font-weight:600}
+.bn{border:1.5px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;background:var(--panel-2);display:flex;flex-direction:column;min-width:112px}
+.bn small{font-family:var(--f-mono);font-size:10px;color:var(--muted)}
+.bn.ev{border-radius:999px;min-width:0;padding:6px 12px}
+.bn.user{border-style:dashed}
+.bn.done{border-color:color-mix(in srgb,var(--good) 65%,var(--line))}
+.bn.cur{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 2px var(--accent-soft)}
+.arrow{width:22px;height:2px;background:var(--line);position:relative;flex:none}
+.arrow::after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left:7px solid var(--line);border-right:0}
+
+.card{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px 16px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.card div{min-width:0}
+.card small{display:block;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.card span{display:block;font-family:var(--f-mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+@media (max-width:1500px){ .app{grid-template-columns:320px minmax(0,1fr) 380px} }
+@media (max-width:1180px){
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;grid-template-areas:"head" "map" "insp" "drawer" "left";height:auto;min-height:0}
+  .svgwrap{max-height:none} .drawer{height:420px} .insp{max-height:none}
+}
+@media (prefers-reduced-motion: reduce){ *{transition:none!important;animation:none!important} }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand"><h1>Cyber Clearance Event Lab</h1><span class="tag">P&amp;C submission clearance · event-driven architecture · training sandbox</span></div>
+    <div class="legend" id="legend"></div>
+    <button class="themebtn" id="themeBtn" type="button">Theme: system</button>
+  </header>
+
+  <!-- LEFT: submission builder -->
+  <section class="panel left" aria-label="Submission builder">
+    <div class="ph"><h2>Submission builder</h2><span class="sub">US · Cyber · Middle Market</span></div>
+    <div class="scroll">
+      <form class="builder" id="subForm" autocomplete="off">
+        <div class="row">
+          <label style="flex:1">Load a sample insured
+            <select id="sample"></select>
+          </label>
+        </div>
+        <fieldset>
+          <legend>Transaction</legend>
+          <div class="seg" role="group" aria-label="Flow">
+            <button type="button" id="flowNB" aria-pressed="true">New business</button>
+            <button type="button" id="flowRN" aria-pressed="false">Renewal</button>
+          </div>
+          <label class="full">Product
+            <select id="product"></select>
+          </label>
+          <label>Effective date<input id="eff" type="date"></label>
+          <label>Limit<select id="limit"></select></label>
+          <label>Retention<select id="retention"></select></label>
+          <label>Submission source<select id="source"><option>Broker portal</option><option>Broker email (ingested)</option><option>ACORD API</option></select></label>
+          <div class="derived" id="derived"></div>
+        </fieldset>
+        <fieldset id="renewalBox" hidden>
+          <legend>Expiring policy (renewal)</legend>
+          <label class="full">Expiring policy number<input id="expPol" class="mono"></label>
+          <label>Expiring premium (USD)<input id="expPrem" type="number" step="1"></label>
+          <label>Expiring limit<select id="expLimit"></select></label>
+          <label class="full">Prior option IDs<input id="expOpts" class="mono"></label>
+        </fieldset>
+        <fieldset>
+          <legend>Insured</legend>
+          <label class="full">Named insured<input id="insName"></label>
+          <label>FEIN<input id="fein" class="mono"></label>
+          <label>Primary domain<input id="domain" class="mono"></label>
+          <label class="full">Street<input id="street"></label>
+          <label>City<input id="city"></label>
+          <label>State<select id="state"></select></label>
+          <label>ZIP<input id="zip" class="mono"></label>
+          <label>Years in business<input id="yib" type="number" min="0"></label>
+          <label class="full">NAICS industry classification<select id="naics"></select></label>
+          <label>SIC (derived)<input id="sic" class="mono" readonly></label>
+          <label>Hazard group (derived)<input id="hazard" readonly></label>
+          <label>Annual revenue (USD)<input id="revenue" type="number" step="1000000" min="0"></label>
+          <label>Employees<input id="emps" type="number" min="0"></label>
+          <label class="full">Sensitive records (PII / PHI / PCI)<input id="records" type="number" min="0" step="1000"></label>
+        </fieldset>
+        <fieldset>
+          <legend>Broker</legend>
+          <label class="full">Brokerage<select id="broker"></select></label>
+          <label>Producer code<input id="prodCode" class="mono" readonly></label>
+          <label>NPN<input id="npn" class="mono" readonly></label>
+          <label>Contact<input id="bContact" readonly></label>
+          <label>Licensed in<input id="bLic" readonly></label>
+          <label class="full">Email<input id="bEmail" class="mono" readonly></label>
+        </fieldset>
+        <label class="toggle"><input type="checkbox" id="race"> Simulate the CDC race (dedup buffer off, up to 4 duplicate enriched messages)</label>
+        <div class="row">
+          <button class="btn primary" type="submit" id="createBtn">Create submission</button>
+          <button class="btn" type="button" id="randBtn">Randomize</button>
+        </div>
+        <div>
+          <h3 class="sec" style="margin-bottom:6px">Submission queue</h3>
+          <div class="queue" id="queue"><div class="empty">No submissions yet. Create one above.</div></div>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- CENTRE: architecture map -->
+  <section class="panel map" aria-label="Architecture map">
+    <div class="controls">
+      <button class="btn" id="bReset" type="button" title="Restart this run">⏮ Restart</button>
+      <button class="btn" id="bBack" type="button">◀ Step back</button>
+      <button class="btn primary" id="bPlay" type="button">▶ Play</button>
+      <button class="btn" id="bNext" type="button">Step ▶</button>
+      <label class="toggle">Speed <input type="range" id="speed" min="0.25" max="3" step="0.25" value="1"><span id="speedV" class="mono">1×</span></label>
+      <span class="ctr" id="ctr">— / —</span>
+      <span class="ctr" id="runLabel" style="margin-left:auto"></span>
+    </div>
+    <div class="narr" id="narr">
+      <div class="num">00</div>
+      <div class="ttl">Create a submission to start</div>
+      <div class="txt">Pick a sample insured on the left (or type your own), choose New business or Renewal and a product, then press Create submission. Every hop between components then plays on this map. Click any box to see what it is.</div>
+    </div>
+    <div class="card" id="subCard" hidden></div>
+    <div class="svgwrap"><svg class="arch" id="arch" viewBox="0 0 1700 1000" role="img" aria-label="Architecture map of the cyber submission clearance platform"></svg></div>
+  </section>
+
+  <!-- RIGHT: inspector -->
+  <section class="panel insp" aria-label="Inspector">
+    <div class="ph"><h2 id="inspTitle">Inspector</h2><span class="sub" id="inspSub">current hop</span></div>
+    <div class="scroll"><div class="ibody" id="insp"><div class="empty">The message for the current hop shows here: protocol, producer, topic, partition, offset, headers, Avro schema and payload. Click a component on the map to see its details instead.</div></div></div>
+  </section>
+
+  <!-- BOTTOM: data drawer -->
+  <section class="panel drawer" aria-label="Data stores and streams">
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="dbody" id="dbody"></div>
+  </section>
+</div>
+
+<script>
+"use strict";
+/* ============================================================ reference data (all sample / fictional) */
+const STATES=[["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],["CA","California"],["CO","Colorado"],["CT","Connecticut"],["DE","Delaware"],["DC","District of Columbia"],["FL","Florida"],["GA","Georgia"],["HI","Hawaii"],["ID","Idaho"],["IL","Illinois"],["IN","Indiana"],["IA","Iowa"],["KS","Kansas"],["KY","Kentucky"],["LA","Louisiana"],["ME","Maine"],["MD","Maryland"],["MA","Massachusetts"],["MI","Michigan"],["MN","Minnesota"],["MS","Mississippi"],["MO","Missouri"],["MT","Montana"],["NE","Nebraska"],["NV","Nevada"],["NH","New Hampshire"],["NJ","New Jersey"],["NM","New Mexico"],["NY","New York"],["NC","North Carolina"],["ND","North Dakota"],["OH","Ohio"],["OK","Oklahoma"],["OR","Oregon"],["PA","Pennsylvania"],["RI","Rhode Island"],["SC","South Carolina"],["SD","South Dakota"],["TN","Tennessee"],["TX","Texas"],["UT","Utah"],["VT","Vermont"],["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"]];
+const STATE_LOAD={CA:1.06,NY:1.05,IL:1.04,MA:1.03,NJ:1.03,TX:1.0,FL:1.02};
+// [NAICS 2022 code, title, SIC, hazard group]
+const NAICS=[
+ ["622110","General Medical and Surgical Hospitals","8062","High"],
+ ["522110","Commercial Banking","6021","High"],
+ ["522130","Credit Unions","6061","High"],
+ ["524114","Direct Health and Medical Insurance Carriers","6324","High"],
+ ["611310","Colleges, Universities, and Professional Schools","8221","High"],
+ ["518210","Computing Infrastructure Providers, Data Processing, Web Hosting","7374","High"],
+ ["221122","Electric Power Distribution","4911","High"],
+ ["325412","Pharmaceutical Preparation Manufacturing","2834","Moderate"],
+ ["541511","Custom Computer Programming Services","7371","Moderate"],
+ ["541211","Offices of Certified Public Accountants","8721","Moderate"],
+ ["488510","Freight Transportation Arrangement","4731","Moderate"],
+ ["455110","Department Stores","5311","Moderate"],
+ ["336411","Aircraft Manufacturing","3721","Moderate"],
+ ["311811","Retail Bakeries","5461","Low"]];
+const HAZ_RATE={Low:95,Moderate:140,High:190};
+const BROKERS=[
+ {id:"HRP",firm:"Harborline Risk Partners LLC",producerCode:"PRD-20418",npn:"18820457",contact:"Dana Whitfield",licenseState:"IL",email:"dwhitfield@harborline-risk.example",city:"Chicago, IL"},
+ {id:"CIB",firm:"Crestmark Insurance Brokerage, Inc.",producerCode:"PRD-31177",npn:"20193384",contact:"Luis Ortega",licenseState:"NY",email:"lortega@crestmark-ib.example",city:"New York, NY"},
+ {id:"BSB",firm:"Bluewater Specialty Brokers",producerCode:"PRD-27762",npn:"17654021",contact:"Kendra Mills",licenseState:"TX",email:"kmills@bluewater-sb.example",city:"Houston, TX"},
+ {id:"SRI",firm:"Summit Ridge Insurance Services",producerCode:"PRD-35510",npn:"21877306",contact:"Arjun Rao",licenseState:"CA",email:"arao@summitridge-ins.example",city:"San Francisco, CA"}];
+// Products map to the enrichment filter's company code + product name (transcript §2.2)
+const PRODUCTS={
+ BCY:{code:"BCY",name:"Basic Cyber",companyCode:"BR",filterProductName:"Business Response",factor:1.0,
+      cob:{code:"CY-MM-110",desc:"Cyber Liability · Middle Market · Basic (breach response + network security & privacy liability)"},
+      limits:[1e6,2e6,3e6,5e6],bpmnQuote:"cyber-quote-basic.bpmn"},
+ ICY:{code:"ICY",name:"Information Cyber",companyCode:"PJ",filterProductName:"Information Security",factor:1.25,
+      cob:{code:"CY-MM-120",desc:"Cyber Liability · Middle Market · Information Security (network, privacy, regulatory, media, dependent BI)"},
+      limits:[1e6,2e6,3e6,5e6,10e6],bpmnQuote:"cyber-quote-infosec.bpmn"}};
+const ALLOWED={processStatus:["Clearance of New Business","Clearance of Renewal"],companyCodes:["BR","PJ"],productNames:["Business Response","Information Security","Information Security Standards","MediaTech"]};
+const ILF={1000000:1,2000000:1.55,3000000:1.95,5000000:2.6,10000000:3.7};
+const RET={25000:1.08,50000:1,100000:0.92,250000:0.82,500000:0.74,1000000:0.65};
+const MM_THRESHOLD=50e6;
+const SAMPLES=[
+ {label:"Northwind Regional Medical Center · OH · $412M",name:"Northwind Regional Medical Center, Inc.",fein:"31-4827715",domain:"northwindrmc.example",street:"1200 Riverside Parkway",city:"Columbus",state:"OH",zip:"43215",yib:64,naics:"622110",revenue:412e6,emps:2850,records:1200000,broker:"HRP",product:"ICY",limit:5e6,ret:250000},
+ {label:"Copperline Credit Union · TX · $96M",name:"Copperline Federal Credit Union",fein:"74-2093318",domain:"copperlinecu.example",street:"8800 Research Blvd",city:"Austin",state:"TX",zip:"78758",yib:41,naics:"522130",revenue:96e6,emps:410,records:310000,broker:"BSB",product:"BCY",limit:3e6,ret:100000},
+ {label:"Bellweather Logistics Group · GA · $230M",name:"Bellweather Logistics Group, Inc.",fein:"58-1764402",domain:"bellweatherlogistics.example",street:"400 Peachtree Industrial Blvd",city:"Atlanta",state:"GA",zip:"30341",yib:22,naics:"488510",revenue:230e6,emps:1100,records:85000,broker:"HRP",product:"BCY",limit:5e6,ret:100000},
+ {label:"Tidewater Polytechnic University · VA · $185M",name:"Tidewater Polytechnic University",fein:"54-0612290",domain:"tidewaterpoly.example",street:"1 College Point Rd",city:"Norfolk",state:"VA",zip:"23529",yib:96,naics:"611310",revenue:185e6,emps:3200,records:640000,broker:"CIB",product:"ICY",limit:5e6,ret:250000},
+ {label:"Granite Peak Software · CO · $78M",name:"Granite Peak Software Corp.",fein:"84-3317620",domain:"granitepeaksoftware.example",street:"1700 Lincoln St, Suite 2400",city:"Denver",state:"CO",zip:"80203",yib:14,naics:"541511",revenue:78e6,emps:390,records:220000,broker:"SRI",product:"ICY",limit:3e6,ret:50000},
+ {label:"Silverleaf Specialty Pharma · NJ · $640M",name:"Silverleaf Specialty Pharmaceuticals, Inc.",fein:"22-3958104",domain:"silverleafpharma.example",street:"100 College Rd West",city:"Princeton",state:"NJ",zip:"08540",yib:31,naics:"325412",revenue:640e6,emps:1900,records:410000,broker:"CIB",product:"ICY",limit:10e6,ret:500000},
+ {label:"Maple & Rye Bakery · VT · $12M (below Middle Market)",name:"Maple & Rye Bakery Co.",fein:"03-0418827",domain:"mapleandrye.example",street:"22 Church St",city:"Burlington",state:"VT",zip:"05401",yib:9,naics:"311811",revenue:12e6,emps:85,records:9000,broker:"HRP",product:"BCY",limit:1e6,ret:25000}];
+
+/* Kafka topics + Avro schemas (Schema Registry subjects) */
+const TOPICS=[
+ {id:"t_received",name:"pc.submission.received",schema:{subject:"pc.submission.received-value",id:1042,version:4,record:"SubmissionReceived"},seed:18234},
+ {id:"t_enriched",name:"pc.submission.enriched",schema:{subject:"pc.submission.enriched-value",id:1057,version:6,record:"SubmissionEnriched"},seed:9611},
+ {id:"t_scan",name:"pc.risk.scan.completed",schema:{subject:"pc.risk.scan.completed-value",id:1063,version:2,record:"RiskScanCompleted"},seed:15402},
+ {id:"t_form",name:"pc.risk.form.updated",schema:{subject:"pc.risk.form.updated-value",id:1071,version:3,record:"RiskFormUpdated"},seed:88213},
+ {id:"t_quote",name:"pc.quote.issued",schema:{subject:"pc.quote.issued-value",id:1088,version:5,record:"QuoteIssued"},seed:4120},
+ {id:"t_bound",name:"pc.policy.bound",schema:{subject:"pc.policy.bound-value",id:1094,version:7,record:"PolicyBound"},seed:2077}];
+const TOPIC_BY_ID=Object.fromEntries(TOPICS.map(t=>[t.id,t]));
+const NS="com.pc.clearance.events";
+const F=(name,type,extra)=>Object.assign({name,type},extra||{});
+const OPT=(name,type)=>({name,type:["null",type],default:null});
+const AVRO={
+ t_received:{type:"record",name:"SubmissionReceived",namespace:NS,fields:[F("submissionId","string"),F("processStatus",{type:"enum",name:"ProcessStatus",symbols:["CLEARANCE_OF_NEW_BUSINESS","CLEARANCE_OF_RENEWAL"]}),F("companyCode","string"),F("productName","string"),F("productCode","string"),F("classOfBusiness",{type:"record",name:"ClassOfBusiness",fields:[F("code","string"),F("description","string")]}),F("insured",{type:"record",name:"Insured",fields:[F("name","string"),F("fein","string"),F("address",{type:"record",name:"Address",fields:[F("street","string"),F("city","string"),F("state","string"),F("postalCode","string"),F("country","string",{default:"US"})]}),F("naicsCode","string"),F("naicsTitle","string"),F("sicCode","string"),F("annualRevenueUsd","long"),F("employeeCount","int"),F("primaryDomain","string"),F("sensitiveRecordCount","long")]}),F("broker",{type:"record",name:"Broker",fields:[F("firmName","string"),F("producerCode","string"),F("npn","string"),F("licenseState","string"),F("contactName","string"),F("email","string")]}),F("requested",{type:"record",name:"Requested",fields:[F("effectiveDate",{type:"int",logicalType:"date"}),F("limitUsd","long"),F("retentionUsd","long")]}),OPT("expiringPolicyNumber","string"),F("receivedAt",{type:"long",logicalType:"timestamp-millis"})]},
+ t_enriched:{type:"record",name:"SubmissionEnriched",namespace:NS,fields:[F("submissionId","string"),F("applicationId","string"),F("processStatus","ProcessStatus"),F("companyCode","string"),F("productName","string"),F("marketSegment",{type:"enum",name:"MarketSegment",symbols:["MIDDLE_MARKET","SMALL_COMMERCIAL"]}),OPT("priorPolicyNumber","string"),F("priorOptionIds",{type:"array",items:"string"},{default:[]}),F("submission","SubmissionReceived"),F("enrichedAt",{type:"long",logicalType:"timestamp-millis"})]},
+ t_scan:{type:"record",name:"RiskScanCompleted",namespace:NS,fields:[F("submissionId","string"),F("applicationId","string"),F("scanType",{type:"enum",name:"ScanType",symbols:["ASM","RSA"]}),F("score","int"),F("grade","string"),F("findings",{type:"array",items:"string"}),F("completedAt",{type:"long",logicalType:"timestamp-millis"})]},
+ t_form:{type:"record",name:"RiskFormUpdated",namespace:NS,fields:[F("riskId","string"),F("submissionId","string"),F("formId","string"),F("formVersion","int"),F("answerGroups",{type:"map",values:{type:"array",items:{type:"record",name:"Answer",fields:[F("key","string"),F("value","string"),F("valueType","string")]}}}),F("status","string"),F("savedBy","string"),F("savedAt",{type:"long",logicalType:"timestamp-millis"})]},
+ t_quote:{type:"record",name:"QuoteIssued",namespace:NS,fields:[F("quoteId","string"),F("quoteNumber","string"),F("riskId","string"),F("submissionId","string"),F("applicationId","string"),F("productCode","string"),F("limitUsd","long"),F("retentionUsd","long"),F("premium",{type:"bytes",logicalType:"decimal",precision:12,scale:2}),F("feesUsd",{type:"bytes",logicalType:"decimal",precision:10,scale:2}),F("validUntil",{type:"int",logicalType:"date"}),F("issuedAt",{type:"long",logicalType:"timestamp-millis"})]},
+ t_bound:{type:"record",name:"PolicyBound",namespace:NS,fields:[F("policyNumber","string"),F("transactionType",{type:"enum",name:"TransactionType",symbols:["NEW_BUSINESS","RENEWAL"]}),F("quoteId","string"),F("riskId","string"),F("submissionId","string"),F("applicationId","string"),OPT("priorPolicyNumber","string"),F("insured","Insured"),F("broker","Broker"),F("productCode","string"),F("classOfBusiness","ClassOfBusiness"),F("naicsCode","string"),F("riskState","string"),F("effectiveDate",{type:"int",logicalType:"date"}),F("expirationDate",{type:"int",logicalType:"date"}),F("limitUsd","long"),F("retentionUsd","long"),F("annualPremium",{type:"bytes",logicalType:"decimal",precision:12,scale:2}),F("boundAt",{type:"long",logicalType:"timestamp-millis"})]}};
+
+/* ============================================================ architecture map */
+const CH={
+ http:{label:"HTTPS / REST",color:"--c-http"}, avro:{label:"Schema Registry",color:"--c-kafka"},
+ kafka:{label:"Kafka",color:"--c-kafka"}, sb:{label:"Azure Service Bus",color:"--c-sb"},
+ sql:{label:"SQL / PostgreSQL",color:"--c-pg"}, cdc:{label:"DB change notification",color:"--c-cdc"},
+ logic:{label:"In-process",color:"--c-logic"}, sr:{label:"SignalR",color:"--c-sr"},
+ es:{label:"Elasticsearch",color:"--c-es"}, connect:{label:"Kafka Connect",color:"--c-snow"}};
+const ZONES=[
+ {x:10,y:10,w:1680,h:220,cls:"kafka",l:"Apache Kafka · Confluent Cloud (Azure East US 2)",s:"cluster lkc-cy7m2 · cross-domain event streaming · replay from any offset",sx:460},
+ {x:10,y:250,w:265,h:215,l:"Broker & intake channels",s:"upstream of clearance"},
+ {x:10,y:480,w:265,h:305,l:"Clearance enrichment",s:"legacy application domain"},
+ {x:10,y:800,w:265,h:190,l:"Underwriters",s:"public internet → App Gateway"},
+ {x:290,y:250,w:1050,h:740,cls:"vnet",l:"Azure spoke VNet · vnet-cyber-eus2 · 10.42.0.0/20",s:"hub-and-spoke landing zone · private endpoints · NSG micro-segmentation · no public IPs"},
+ {x:305,y:290,w:740,h:395,cls:"subnet",l:"snet-appsvc · 10.42.1.0/24",s:"App Service Plan · 3 availability zones · East US 2"},
+ {x:320,y:332,w:710,h:342,cls:"proc",l:"",s:"single process boundary · cyber-api"},
+ {x:1060,y:290,w:265,h:395,cls:"subnet",l:"snet-messaging · 10.42.2.0/24",s:"private endpoint pe-sb-cyber"},
+ {x:305,y:700,w:540,h:280,cls:"subnet",l:"snet-data · 10.42.3.0/24",s:"PostgreSQL Flexible Server per service"},
+ {x:860,y:700,w:185,h:280,cls:"subnet",l:"snet-search",s:"10.42.4.0/24"},
+ {x:1060,y:700,w:265,h:280,cls:"subnet",l:"snet-ops · 10.42.5.0/24",s:"jobs & admin access"},
+ {x:1355,y:250,w:335,h:740,l:"Downstream domain consumers",s:"each owns its consumer group + offsets"}];
+const NODES=[
+ {id:"schema",x:28,y:52,w:180,h:92,t:"Schema Registry",s:["Avro · BACKWARD compat","subjects per topic"],k:"--c-kafka"},
+ ...TOPICS.map((t,i)=>({id:t.id,x:240+i*205,y:52,w:190,h:92,t:t.name,s:["6 partitions · RF 3","key = submission/risk id"],k:"--c-kafka",topic:true})),
+ {id:"connect",x:1480,y:52,w:195,h:92,t:"Kafka Connect",s:["snowflake-sink-cyber","2 tasks · Snowpipe Streaming"],k:"--c-snow"},
+ {id:"portal",x:25,y:296,w:235,h:70,t:"Broker Submission Portal",s:["ACORD-style JSON over HTTPS"],k:"--c-ext"},
+ {id:"intake",x:25,y:384,w:235,h:76,t:"Intake Service",s:["intake-svc · Kafka producer","acks=all · idempotent"],k:"--c-http"},
+ {id:"enrich",x:25,y:524,w:235,h:76,t:"Enrichment Service",s:["consumer: cg-submission-enrichment","producer: enrichment-svc"],k:"--c-kafka"},
+ {id:"legacy",x:25,y:610,w:235,h:76,t:"Legacy Application DB",s:["APPLICATION · POLICY · OPTION","issues Application IDs"],k:"--c-pg"},
+ {id:"cdc",x:25,y:697,w:235,h:76,t:"DB change listener",s:["notifies on APPLICATION rows","2nd trigger into enrichment"],k:"--c-cdc"},
+ {id:"browser",x:25,y:836,w:235,h:130,t:"Underwriter browser",s:["Cyber Workbench UI (SPA)","REST commands → Web API","SignalR live updates"],k:"--c-ext"},
+ {id:"rider",x:335,y:362,w:170,h:76,t:"Kafka Rider",s:["MassTransit rider","cg-cyber-workbench"],k:"--c-kafka"},
+ {id:"api",x:335,y:452,w:170,h:76,t:"Web API",s:["ASP.NET Core controllers","returns 202 Accepted"],k:"--c-http"},
+ {id:"outbox",x:335,y:542,w:170,h:56,t:"Outbox daemon",s:["Marten async daemon"],k:"--c-pg"},
+ {id:"signalr",x:335,y:608,w:170,h:56,t:"SignalR hub",s:["/hubs/risk"],k:"--c-sr"},
+ {id:"lm",x:525,y:362,w:495,h:302,t:"Lifecycle Manager",s:["BPMN workflow engine · C# plugins · service locator + IoC scopes"],k:"--c-logic",lm:true},
+ {id:"asb",x:1075,y:336,w:235,h:150,t:"Azure Service Bus",s:["sb-cyber-eus2 (Premium)","queue lm-commands · sessions","topic risk-events","MassTransit transport"],k:"--c-sb"},
+ {id:"pg",x:320,y:740,w:510,h:225,t:"PostgreSQL Flexible Server",s:["psql-cyber-api · db cyber_api_db · Marten event store (ACID)"],k:"--c-pg",pg:true},
+ {id:"es",x:875,y:740,w:155,h:225,t:"Elasticsearch",s:["index risk-dashboard","read projections"],k:"--c-es",es:true},
+ {id:"aca",x:1075,y:742,w:235,h:96,t:"Backup job (ACA)",s:["Azure Container Apps job","nightly pg_dump → Blob","7-year retention"],k:"--c-sb"},
+ {id:"bastion",x:1075,y:852,w:235,h:96,t:"Azure Bastion",s:["only admin path into VNet","RDP / SSH over TLS"],k:"--c-ext"},
+ {id:"asm",x:1372,y:296,w:300,h:76,t:"ASM service",s:["Attack Surface Monitoring","cg-asm-scan"],k:"--c-kafka"},
+ {id:"rsa",x:1372,y:384,w:300,h:76,t:"RSA service",s:["Risk Security Assessment","cg-rsa-assessment"],k:"--c-kafka"},
+ {id:"snow",x:1372,y:490,w:300,h:96,t:"Snowflake",s:["CYBER_DW.RAW · via Kafka Connect","400+ attribute analytic models","cross-domain reporting"],k:"--c-snow"},
+ {id:"pas",x:1372,y:606,w:300,h:96,t:"Policy Admin System",s:["out of scope for this lab","cg-pas-policy-issuance","consumes pc.policy.bound"],k:"--c-ext",out:true}];
+const NODE=Object.fromEntries(NODES.map(n=>[n.id,n]));
+const LM_TASKS=[
+ {id:"t_clear",x:545,y:487,t:"ClearanceCheck",row:"sys"},{id:"t_app",x:701,y:487,t:"AppetiteValidation",row:"sys"},{id:"t_score",x:857,y:487,t:"ScoringAlgorithm",row:"sys"},
+ {id:"t_upgrade",x:545,y:523,t:"UpgradeFlowVersion",row:"sys"},{id:"t_rate",x:701,y:523,t:"RatingEngine",row:"sys"},{id:"t_bind",x:857,y:523,t:"BindPolicy",row:"sys"},
+ {id:"u_risk",x:545,y:582,t:"Complete Risk Details",row:"user"},{id:"u_quote",x:701,y:582,t:"Review & Issue Quote",row:"user"},{id:"u_bind",x:857,y:582,t:"Request Bind",row:"user"}];
+
+/* component descriptions (inspector when a box is clicked) */
+const INFO={
+ portal:{tech:"Web portal / ACORD-style API",host:"Outside the clearance domain",ref:"§1.1, §2.3",what:"Where brokers submit new and renewal cyber risks. Sends a JSON submission to the Intake Service over HTTPS.",points:["Brokers never talk to the workbench directly; everything enters through intake.","Email submissions are ingested into the same JSON shape."]},
+ intake:{tech:".NET worker · Confluent .NET client",host:"Upstream intake domain",ref:"§2.1, §2.3",what:"Validates the submission against its Avro schema and produces it to pc.submission.received, keyed by submission ID.",points:["acks=all and enable.idempotence=true: no lost or duplicated writes from the producer side.","Keying by submission ID puts every event for one risk on one partition, in order."]},
+ enrich:{tech:".NET worker · Kafka consumer + producer",host:"Clearance enrichment domain",ref:"§2.1, §2.2, §2.4",what:"Reconciles each raw submission with the legacy application database. Creates the Application ID that ASM and RSA need, attaches expiring-policy details on renewals, and publishes to pc.submission.enriched.",points:["Filters on process status, company code (BR, PJ) and product name. Anything else is silently ignored.","Two triggers: the Kafka intake topic AND legacy DB change notifications. If both fire together it can publish up to 4 identical messages.","Fix options from the transcript: disable the DB listener, or add a dedup buffer before publishing. Consumers must be idempotent either way."]},
+ legacy:{tech:"Relational DB (legacy)",host:"On-premise / legacy estate",ref:"§2.1",what:"System of record for Application IDs and prior policies. External risk tools were built around its mandatory Application ID.",points:["Enrichment creates the APPLICATION row when it is missing.","Renewals look up the expiring POLICY and its OPTION rows."]},
+ cdc:{tech:"Change notification listener",host:"Clearance enrichment domain",ref:"§2.4",what:"Fires when APPLICATION rows change so late manual edits (for example a corrected prior policy reference) still reach Kafka.",points:["It also fires on the row enrichment itself just wrote. That is the source of the race.","Turn on 'Simulate the CDC race' in the builder to watch the duplicates appear."]},
+ browser:{tech:"Single-page app",host:"Underwriter desktop",ref:"§1.1, §1.3",what:"The Cyber Workbench. Sends commands to the Web API and receives live updates over SignalR.",points:["Commands are acknowledged before they are validated, so errors can surface later on another screen.","If a SignalR push fails after Elasticsearch is updated, this view stays stale until a manual refresh."]},
+ schema:{tech:"Confluent Schema Registry",host:"Confluent Cloud",ref:"§1.6",what:"Holds the Avro schema for every topic (subject = <topic>-value). Producers register or look up a schema ID; consumers use that ID to deserialize.",points:["BACKWARD compatibility: new fields need defaults; required fields cannot be dropped.","Schemas are compiled into strongly typed C# classes at build time."]},
+ connect:{tech:"Kafka Connect · Snowflake sink",host:"Confluent Cloud managed connector",ref:"§2.3",what:"Streams form and policy events into Snowflake raw tables without touching operational databases.",points:["Analytics teams reshape dynamic JSON form answers into 400+ relational attributes."]},
+ rider:{tech:"MassTransit Kafka rider",host:"Inside the cyber-api process",ref:"§1.6",what:"Consumes Kafka topics into the workbench (consumer group cg-cyber-workbench), deserializes Avro, and turns events into internal commands on Azure Service Bus.",points:["Uses an inbox table keyed on message ID so redelivered or duplicate messages are processed once.","Kafka is for cross-domain events; Service Bus is for commands inside the bounded context."]},
+ api:{tech:"ASP.NET Core Web API",host:"App Service · cyber-api",ref:"§1.1",what:"Receives underwriter commands, puts them on the internal bus, and returns 202 Accepted straight away.",points:["The UI cannot know whether the command is valid when the response comes back.","Example from the transcript: assigning a user who does not exist still returns success."]},
+ outbox:{tech:"Marten async daemon (outbox)",host:"Inside the cyber-api process",ref:"§1.3",what:"Reads new event-ledger positions in order and fans them out: Elasticsearch projections and SignalR pushes.",points:["The two fan-out steps are not one transaction: a consistency gap the transcript calls out."]},
+ signalr:{tech:"ASP.NET Core SignalR",host:"Inside the cyber-api process",ref:"§1.3",what:"Pushes RiskUpdated, QuoteUpdated and PolicyBound notifications to the browser group for a risk.",points:["Push failure leaves the browser on old data until refresh."]},
+ lm:{tech:"Custom BPMN workflow engine (forked source)",host:"Inside the cyber-api process",ref:"§1.1, §1.2, §1.5, §3",what:"Runs BPMN diagrams stored as XML in /config/lifecycle-manager/process/. System task nodes map to C# classes implementing IHandleServiceTask.Execute(); user tasks expose composite forms.",points:["Parent risk workflow (WF-RISK-…) spawns child quote workflows (WF-QUOTE-…); they sync through IHandleChangeMadeToParent / IHandleChangeMadeToChild.","Events in a task chain are staged in memory and roll back together; FlowSnapshot is appended only when the chain succeeds.","Known pressure points: service-locator scopes, GC pauses under load, untyped key-value state.","Roadmap: replace with a standard workflow orchestrator (Temporal-style)."]},
+ asb:{tech:"Azure Service Bus Premium",host:"snet-messaging via private endpoint",ref:"§1.1, §1.4",what:"Transport for MassTransit commands inside the bounded context. Sessions keyed by risk ID give ordered, one-at-a-time processing per risk.",points:["Partitioning / sessions solve the out-of-order state problem from §1.2."]},
+ pg:{tech:"Azure Database for PostgreSQL Flexible Server · Marten",host:"snet-data · private endpoint",ref:"§1.3, §3.4",what:"The write side. mt_events holds the append-only event streams (stream_id = Risk ID); mt_doc_flow_snapshot_projection holds the current state per workflow instance.",points:["One server per application service to avoid noisy neighbours.","ACID transaction covers the events and the outbox position together."]},
+ es:{tech:"Elasticsearch",host:"snet-search",ref:"§1.3",what:"Read side for dashboards: filter submissions by state, assignee, renewal status.",points:["Marten's own projections are not used for this; the outbox projects into Elasticsearch."]},
+ aca:{tech:"Azure Container Apps job",host:"snet-ops",ref:"§1.4",what:"Nightly full pg_dump of each PostgreSQL server into long-term Blob storage for 7-year regulatory retention.",points:["Click 'Run backup job' to watch it."],backup:true},
+ bastion:{tech:"Azure Bastion",host:"snet-ops (AzureBastionSubnet)",ref:"§1.4",what:"The only way administrators reach machines inside the VNet.",points:["No public IPs anywhere in the spoke."]},
+ asm:{tech:"Attack Surface Monitoring service",host:"Risk evaluation domain",ref:"§2.1",what:"Consumes enriched submissions and scans the insured's external footprint (domains, open ports, TLS, leaked credentials).",points:["Needs the legacy Application ID, which is why enrichment exists."]},
+ rsa:{tech:"Risk Security Assessment service",host:"Risk evaluation domain",ref:"§2.1",what:"Scores security-control maturity for the risk on a 1–5 scale.",points:["Publishes its result to pc.risk.scan.completed."]},
+ snow:{tech:"Snowflake data warehouse",host:"Enterprise analytics",ref:"§2.3",what:"Receives every form save and every bound policy for cross-domain analytics (policies, submissions, accounts, industry benchmarks).",points:["Queries here never load the operational databases."]},
+ pas:{tech:"Policy Administration System",host:"Downstream (not modelled)",ref:"brief",what:"Issues the policy after bind. In this lab it only appears as a Kafka consumer of pc.policy.bound.",points:["Any new consumer can start at offset 0 and replay every bound policy."]}};
+for(const t of TOPICS) INFO[t.id]={tech:"Kafka topic · Avro value · string key",host:"Confluent Cloud lkc-cy7m2",ref:"§1.6",what:`Topic ${t.name}. 6 partitions, replication factor 3, value schema ${t.schema.subject} (id ${t.schema.id}, v${t.schema.version}).`,points:["Partition = hash(key) mod 6, so one submission always lands on the same partition.","Retention is long enough that new consumers can replay from offset 0."],topic:t.id};
+
+/* ============================================================ helpers */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const usd=n=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(n);
+const usdM=n=>n>=1e6?`$${(n/1e6).toLocaleString("en-US",{maximumFractionDigits:1})}M`:usd(n);
+const fnv=s=>{let h=0x811c9dc5;for(const ch of String(s)){h^=ch.charCodeAt(0);h=Math.imul(h,0x01000193)>>>0}return h>>>0};
+const pad=(n,l)=>String(n).padStart(l,"0");
+const uuid=seed=>{const h=[fnv(seed),fnv(seed+"a"),fnv(seed+"b"),fnv(seed+"c")].map(x=>x.toString(16).padStart(8,"0")).join("");return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`};
+const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const jhtml=o=>esc(JSON.stringify(o,null,2)).replace(/(&quot;(?:(?!&quot;).)*&quot;)(\s*:)?|\b(true|false|null)\b|-?\b\d+(?:\.\d+)?\b/g,(m,str,colon,lit)=>str?(colon?`<span class="jk">${str}</span>${colon}`:`<span class="js">${str}</span>`):lit?`<span class="jl">${m}</span>`:`<span class="jn">${m}</span>`);
+const addYears=(d,y)=>{const x=new Date(d+"T00:00:00Z");x.setUTCFullYear(x.getUTCFullYear()+y);return x.toISOString().slice(0,10)};
+const addDays=(d,n)=>{const x=new Date(d+"T00:00:00Z");x.setUTCDate(x.getUTCDate()+n);return x.toISOString().slice(0,10)};
+const naicsOf=code=>NAICS.find(n=>n[0]===code);
+const brokerOf=id=>BROKERS.find(b=>b.id===id);
+const segmentOf=rev=>rev>MM_THRESHOLD?"MIDDLE_MARKET":"SMALL_COMMERCIAL";
+const grade=s=>s>=850?"A":s>=750?"B":s>=650?"C":s>=550?"D":"F";
+
+/* ============================================================ world state (survives across runs) */
+function newWorld(){
+  return {
+    topics:Object.fromEntries(TOPICS.map(t=>[t.id,{records:[],next:[0,1,2,3,4,5].map(p=>t.seed+p*137+(fnv(t.name+p)%90))}])),
+    groups:{}, legacy:{applications:[],policies:[]}, mtEvents:[], seq:51230, snapshots:{}, outboxPos:51230,
+    es:{}, snow:{RISK_FORM_EVENTS:[],POLICY_BOUND:[]}, sb:[], inbox:[], backups:[],
+    ctr:{app:3104552,risk:8801,quote:9942,quoteNo:1, policy:1}};
+}
+let world=newWorld();
+let subSeq=104817;
+const subs=[]; let run=null;
+
+function produce(w,tid,key,value,producer,ts,extraHeaders){
+  const t=TOPIC_BY_ID[tid], st=w.topics[tid], p=fnv(key)%6, off=st.next[p]++;
+  const rec={topic:t.name,tid,partition:p,offset:off,key,value,producer,ts,leader:`broker-${p%3}`,
+    schemaId:t.schema.id,headers:Object.assign({"content-type":"application/vnd.confluent.avro","message-id":uuid(t.name+key+off),"correlation-id":value.submissionId||key,"producer":producer},extraHeaders||{})};
+  st.records.push(rec); return rec;
+}
+function consume(w,group,rec){
+  w.groups[group]=w.groups[group]||{};
+  const k=`${rec.topic}[${rec.partition}]`; w.groups[group][k]=rec.offset+1; return {group,committed:rec.offset+1,k};
+}
+function appendEvents(w,stream,types,ts,dataFn){
+  const cur=w.mtEvents.filter(e=>e.stream_id===stream).length;
+  return types.map((type,i)=>{const e={seq_id:++w.seq,id:uuid(stream+type+w.seq),stream_id:stream,version:cur+i+1,type,timestamp:ts,data:dataFn?dataFn(type):{}};w.mtEvents.push(e);return e;});
+}
+
+/* ============================================================ submission model */
+function readForm(){
+  const n=naicsOf($("#naics").value), b=brokerOf($("#broker").value), prod=PRODUCTS[$("#product").value];
+  const flow=$("#flowRN").getAttribute("aria-pressed")==="true"?"RN":"NB";
+  const eff=$("#eff").value||new Date().toISOString().slice(0,10);
+  return {flow,product:prod.code,source:$("#source").value,race:$("#race").checked,
+    insured:{name:$("#insName").value.trim()||"Unnamed insured",fein:$("#fein").value.trim(),domain:$("#domain").value.trim(),
+      address:{street:$("#street").value.trim(),city:$("#city").value.trim(),state:$("#state").value,zip:$("#zip").value.trim(),country:"US"},
+      yib:+$("#yib").value||0,naics:n[0],naicsTitle:n[1],sic:n[2],hazard:n[3],revenue:+$("#revenue").value||0,emps:+$("#emps").value||0,records:+$("#records").value||0},
+    broker:{...b},effective:eff,expiration:addYears(eff,1),limit:+$("#limit").value,retention:+$("#retention").value,
+    expiring:flow==="RN"?{policyNumber:$("#expPol").value.trim(),premium:+$("#expPrem").value||0,limit:+$("#expLimit").value,optionIds:$("#expOpts").value.split(/[\s,]+/).filter(Boolean)}:null};
+}
+function eligibility(sub){
+  const p=PRODUCTS[sub.product];
+  const ps=sub.flow==="NB"?"Clearance of New Business":"Clearance of Renewal";
+  const rows=[
+    ["Process status",ps,ALLOWED.processStatus.includes(ps),"Clearance of New Business | Clearance of Renewal"],
+    ["Company code",p.companyCode,ALLOWED.companyCodes.includes(p.companyCode),ALLOWED.companyCodes.join(" | ")],
+    ["Product name",p.filterProductName,ALLOWED.productNames.includes(p.filterProductName),ALLOWED.productNames.join(" | ")],
+    ["Country","US",sub.insured.address.country==="US","US only"],
+    ["Market segment (revenue)",`${usdM(sub.insured.revenue)} → ${segmentOf(sub.insured.revenue)}`,sub.insured.revenue>MM_THRESHOLD,"> $50M → Middle Market workbench"]];
+  if(sub.flow==="RN") rows.push(["Expiring policy reference",sub.expiring.policyNumber||"(missing)",!!sub.expiring.policyNumber,"required for renewal"]);
+  return {ok:rows.every(r=>r[2]),rows,processStatus:ps};
+}
+function scores(sub){
+  const h=fnv(sub.insured.fein+sub.insured.domain);
+  const asm=420+(h%500), rsa=1+(Math.floor(h/7)%5);
+  const pool=["RDP exposed on 1 host","TLS 1.0 enabled on mail gateway","DMARC policy = none","2 leaked credentials (2024 combo list)","End-of-life VPN appliance firmware","Lookalike domain registered","Patch cadence median 21 days","No exposed databases found","MFA enforced on email","EDR on 100% of endpoints"];
+  const f1=[0,1,2,3,4,5,6].filter(i=>(h>>i)&1).map(i=>pool[i]).slice(0,4); if(!f1.length) f1.push(pool[7]);
+  return {asm,asmGrade:grade(asm),rsa,asmFindings:f1,rsaFindings:[rsa>=4?pool[8]:"MFA gaps on privileged accounts",rsa>=3?pool[9]:"EDR coverage 70%","Incident response plan tested "+(rsa>=3?"within 12 months":"over 24 months ago")]};
+}
+function rate(sub,sc){
+  const p=PRODUCTS[sub.product], rev=sub.insured.revenue/1e6, hz=HAZ_RATE[sub.insured.hazard];
+  const base=1500+hz*Math.pow(rev,0.85);
+  const ilf=ILF[sub.limit]||1, ret=RET[sub.retention]||1;
+  const asmF=+(1.25-(sc.asm-300)/650*0.4).toFixed(3), rsaF=[1.10,1.05,1.0,0.95,0.90][sc.rsa-1];
+  const st=STATE_LOAD[sub.insured.address.state]||1;
+  const lines=[["Exposure base",`${rev.toFixed(1)}M revenue^0.85 × ${hz} (${sub.insured.hazard} hazard) + 1,500`,Math.round(base)],
+    ["Increased limit factor",`${usdM(sub.limit)} limit`,ilf],["Retention factor",`${usd(sub.retention)} retention`,ret],
+    ["Product factor",p.name,p.factor],["ASM score factor",`score ${sc.asm} (${sc.asmGrade})`,asmF],["RSA maturity factor",`maturity ${sc.rsa}/5`,rsaF],
+    ["State regulatory load",sub.insured.address.state,st]];
+  let prem=Math.round(base*ilf*ret*p.factor*asmF*rsaF*st/10)*10;
+  const fee=250;
+  const out={lines,premium:prem,fee,total:prem+fee};
+  if(sub.flow==="RN"&&sub.expiring.premium){out.expiringPremium=sub.expiring.premium;out.rateChange=+(((prem/sub.expiring.premium)-1)*100).toFixed(1);}
+  return out;
+}
+
+/* ============================================================ step builder */
+function buildSteps(sub){
+  const S=[], nb=sub.flow==="NB", el=eligibility(sub), P=PRODUCTS[sub.product], race=sub.race;
+  const add=o=>S.push(o);
+  const proj=(label,esDoc,srMsg,extraNote)=>{
+    add({from:"pg",to:"outbox",ch:"sql",title:"Outbox daemon reads new ledger positions",ref:"§1.3 outbox pattern",
+      narr:"The async daemon polls the event ledger in sequence order. Only after the write transaction commits does it see the new events, so readers never see half a task chain.",
+      apply:(w,c,i)=>{const from=w.outboxPos+1, to=w.seq; w.outboxPos=to;
+        return {kv:[["Daemon","Marten async daemon · shard risk-dashboard:All"],["Ledger range",`seq_id ${from} → ${to}`],["Events picked up",String(to-from+1)],["High-water mark",String(to)]],
+          sql:`SELECT seq_id, stream_id, type, data\n  FROM cyber.mt_events\n WHERE seq_id > ${from-1}\n ORDER BY seq_id\n LIMIT 500;\n\nUPDATE cyber.mt_event_progression\n   SET last_seq_id = ${to}\n WHERE name = 'risk-dashboard:All';`};}});
+    add({from:"outbox",to:"es",ch:"es",title:`Project to Elasticsearch: ${label}`,ref:"§1.3 read projections",
+      narr:"The daemon upserts the dashboard document for this risk. Underwriter queues filter on these fields (state, assignee, renewal flag), never on the event store.",
+      apply:(w,c,i)=>{const doc=esDoc(c); w.es[c.ids.risk]=doc; return {kv:[["Index","risk-dashboard"],["Operation","PUT /risk-dashboard/_doc/"+c.ids.risk],["Refresh","wait_for"],["Result",Object.keys(w.es).length>1?"updated":"created"]],payload:doc};}});
+    add({from:"signalr",to:"browser",ch:"sr",title:`SignalR push: ${srMsg}`,ref:"§1.3 consistency gap",
+      narr:"The daemon hands the change to the SignalR hub, which pushes it to every browser watching this risk. This is a separate, non-transactional step from the Elasticsearch write.",
+      note:extraNote,
+      apply:(w,c,i)=>({kv:[["Hub","/hubs/risk"],["Group",`risk:${c.ids.risk}`],["Method",srMsg],["Transport","WebSockets"]],payload:{type:1,target:srMsg,arguments:[{riskId:c.ids.risk,submissionId:sub.submissionId,status:c.status,version:c.wfVersion||1}]}})});
+  };
+
+  add({from:"portal",to:"intake",ch:"http",title:"Broker submits the risk",ref:"§1.1, §2.1 intake",
+    narr:`${sub.broker.firm} submits ${sub.insured.name} for ${nb?"new business":"renewal"} on ${P.name}. The portal posts an ACORD-style JSON document to the Intake Service.`,
+    apply:(w,c,i)=>({kv:[["Method","POST /api/v2/intake/submissions"],["Source",sub.source],["Response","201 Created · Location: /submissions/"+sub.submissionId],["Submission ID",sub.submissionId]],payload:acord(sub)})});
+  add({from:"intake",to:"schema",ch:"avro",title:"Look up the Avro schema ID",ref:"§1.6 schema governance",
+    narr:"Before producing, the serializer asks the Schema Registry for the schema ID of subject pc.submission.received-value. The ID (not the whole schema) is written into every message's first 5 bytes.",
+    apply:(w,c,i)=>{const t=TOPIC_BY_ID.t_received;return {kv:[["Request",`POST /subjects/${t.schema.subject}?normalize=true`],["Subject",t.schema.subject],["Schema ID",String(t.schema.id)],["Version",`v${t.schema.version}`],["Compatibility","BACKWARD"],["Wire format","magic byte 0x00 + 4-byte schema id + Avro binary"]],schema:AVRO.t_received};}});
+  add({from:"intake",to:"t_received",ch:"kafka",title:"Produce SubmissionReceived",ref:"§1.6, §2.3 intake stream",
+    narr:"The Intake Service produces the raw submission to pc.submission.received. The key is the submission ID, so the partition is fixed for the life of this submission.",
+    apply:(w,c,i)=>{const r=produce(w,"t_received",sub.submissionId,receivedValue(sub,c),"intake-svc",c.ts(i));c.rec.received=r;return kdetail(r,"produce");}});
+  add({from:"t_received",to:"enrich",ch:"kafka",title:"Enrichment Service consumes",ref:"§2.1 enrichment mechanism",
+    narr:"The Enrichment Service, consumer group cg-submission-enrichment, polls the partition and reads the record.",
+    apply:(w,c,i)=>{const r=c.rec.received;const g=consume(w,"cg-submission-enrichment",r);return kdetail(r,"consume",g,"enrichment-svc-7f9c-0");}});
+  add({from:"enrich",to:"enrich",ch:"logic",title:"Apply product and segment filters",ref:"§2.2 filtering logic",
+    narr:el.ok?"Every filter passes, so this submission qualifies for automated Middle Market cyber clearance.":"At least one filter fails. The enrichment worker silently ignores the message: nothing is published and no error is raised.",
+    apply:(w,c,i)=>({evalRows:el.rows,kv:[["Result",el.ok?"QUALIFIED → continue":"IGNORED (silent)"]]})});
+  if(!el.ok){
+    add({from:"enrich",to:"enrich",ch:"logic",title:"Submission ignored. Flow ends here",ref:"§2.2 action on non-match",stop:true,
+      narr:sub.insured.revenue<=MM_THRESHOLD?`Revenue of ${usdM(sub.insured.revenue)} is not above $50M, so this risk belongs to the small commercial flow, which this lab does not model. Raise the revenue above $50M to see the Middle Market path.`:"A filter failed. Fix the input and create the submission again.",
+      apply:(w,c,i)=>(c.status="IGNORED",{kv:[["Offset committed","yes (message is consumed, not retried)"],["Published","nothing"]],note:"Teaching point: filtered messages vanish silently. Without a metric or log line on this branch nobody can tell a filtered submission from a lost one."})});
+    return S;
+  }
+  add({from:"enrich",to:"legacy",ch:"sql",title:nb?"Look up the application: none exists":"Look up the expiring policy",ref:"§2.1 application identifier",
+    narr:nb?"Enrichment checks whether the legacy database already has an application for this insured and submission. It does not, so one must be created.":`Enrichment finds expiring policy ${sub.expiring.policyNumber} and its option rows. Those become the prior references on the enriched message.`,
+    apply:(w,c,i)=>{const pol=w.legacy.policies.find(p=>p.POLICY_NUMBER===sub.expiring?.policyNumber);
+      return {sql:nb?`SELECT APPLICATION_ID\n  FROM dbo.APPLICATION\n WHERE FEIN = '${sub.insured.fein}'\n   AND SUBMISSION_REF = '${sub.submissionId}';\n-- 0 rows`:`SELECT p.POLICY_NUMBER, p.EXPIRATION_DATE, p.ANNUAL_PREMIUM, o.OPTION_ID\n  FROM dbo.POLICY p\n  JOIN dbo.POLICY_OPTION o ON o.POLICY_NUMBER = p.POLICY_NUMBER\n WHERE p.POLICY_NUMBER = '${sub.expiring.policyNumber}';\n-- ${sub.expiring.optionIds.length} rows`,
+        kv:[["Rows",nb?"0":String(sub.expiring.optionIds.length)]],payload:nb?undefined:pol};}});
+  add({from:"enrich",to:"legacy",ch:"sql",title:"Create the legacy application record",ref:"§2.1 enrichment mechanism",
+    narr:"Enrichment inserts an APPLICATION row and gets back the Application ID that ASM and RSA require. This is the ID that lets downstream scanning run without manual data entry.",
+    apply:(w,c,i)=>{c.ids.app=`APP-${++w.ctr.app}`;const row={APPLICATION_ID:c.ids.app,SUBMISSION_REF:sub.submissionId,FEIN:sub.insured.fein,INSURED_NAME:sub.insured.name,COMPANY_CODE:P.companyCode,PRODUCT_NAME:P.filterProductName,PROCESS_STATUS:el.processStatus,PRIOR_POLICY_NUMBER:sub.expiring?.policyNumber||null,CREATED_BY:"enrichment-svc",CREATED_AT:c.ts(i)};w.legacy.applications.push(row);
+      return {sql:`INSERT INTO dbo.APPLICATION\n  (SUBMISSION_REF, FEIN, INSURED_NAME, COMPANY_CODE, PRODUCT_NAME,\n   PROCESS_STATUS, PRIOR_POLICY_NUMBER, CREATED_BY)\nOUTPUT inserted.APPLICATION_ID\nVALUES ('${sub.submissionId}', '${sub.insured.fein}', '${sub.insured.name.replace(/'/g,"''")}',\n        '${P.companyCode}', '${P.filterProductName}', '${el.processStatus}',\n        ${sub.expiring?`'${sub.expiring.policyNumber}'`:"NULL"}, 'enrichment-svc');`,kv:[["Application ID",c.ids.app]],payload:row};}});
+  add({from:"legacy",to:"cdc",ch:"cdc",title:"Change listener fires on the new row",ref:"§2.4 dual-trigger architecture",
+    narr:"The database change listener sees the INSERT on APPLICATION. It cannot tell that enrichment itself wrote the row, so it raises a second trigger for the same submission.",
+    apply:(w,c,i)=>({kv:[["Table","dbo.APPLICATION"],["Operation","INSERT"],["Key",c.ids.app],["LSN","0x0000A3F2:00019C40:0003"]]})});
+  add({from:"cdc",to:"enrich",ch:"cdc",title:race?"Race: both triggers publish":"Dedup buffer suppresses the second trigger",ref:"§2.4 race conditions",
+    narr:race?"The CDC trigger and the Kafka trigger run in parallel. Each sees the other's change and both publish, twice each. Four identical enriched messages are about to hit the topic.":"The dedup buffer holds the (submission ID, application ID) pair for 5 minutes, so the second trigger is dropped before publishing.",
+    apply:(w,c,i)=>({kv:[["Trigger A","Kafka pc.submission.received"],["Trigger B","DB change notification"],["Dedup key",`${sub.submissionId}:${c.ids.app}`],["Decision",race?"buffer OFF → publish from both":"duplicate → drop"]],note:race?"Teaching point: Kafka is at-least-once anyway, so every consumer must be idempotent. Watch the Kafka Rider drop 3 of the 4 copies.":undefined})});
+  add({from:"enrich",to:"t_enriched",ch:"kafka",dup:race?4:1,title:race?"Produce SubmissionEnriched ×4 (duplicates)":"Produce SubmissionEnriched",ref:"§2.1, §2.4",
+    narr:`The enriched message carries Application ID, market segment${nb?"":", the prior policy number and prior option IDs"}. Same key as before, so it lands on a fixed partition of pc.submission.enriched.`,
+    apply:(w,c,i)=>{const v=enrichedValue(sub,c,el,i);const n=race?4:1;c.rec.enriched=[];for(let k=0;k<n;k++)c.rec.enriched.push(produce(w,"t_enriched",sub.submissionId,v,"enrichment-svc",c.ts(i),{"trigger":k%2?"cdc-listener":"kafka-intake"}));
+      const d=kdetail(c.rec.enriched[0],"produce");if(n>1)d.kv.push(["Duplicates",`offsets ${c.rec.enriched.map(r=>r.offset).join(", ")}`]);return d;}});
+  add({from:"t_enriched",to:"asm",ch:"kafka",title:"ASM service consumes",ref:"§2.1 downstream scans",
+    narr:"Attack Surface Monitoring has its own consumer group, so it reads the same message independently of every other consumer.",
+    apply:(w,c,i)=>{const r=c.rec.enriched[0];const g=consume(w,"cg-asm-scan",c.rec.enriched.at(-1));return kdetail(r,"consume",g,"asm-scanner-0");}});
+  add({from:"t_enriched",to:"rsa",ch:"kafka",title:"RSA service consumes",ref:"§2.1 downstream scans",
+    narr:"Risk Security Assessment reads the same enriched message under consumer group cg-rsa-assessment.",
+    apply:(w,c,i)=>{const r=c.rec.enriched[0];const g=consume(w,"cg-rsa-assessment",c.rec.enriched.at(-1));return kdetail(r,"consume",g,"rsa-worker-1");}});
+  add({from:"asm",to:"t_scan",ch:"kafka",title:"ASM publishes its scan result",ref:"§2.1",
+    narr:"The outside-in scan of the insured's domain finishes and the result is published, keyed by submission ID.",
+    apply:(w,c,i)=>{c.sc=scores(sub);const v={submissionId:sub.submissionId,applicationId:c.ids.app,scanType:"ASM",score:c.sc.asm,grade:c.sc.asmGrade,findings:c.sc.asmFindings,completedAt:c.ts(i)};c.rec.asm=produce(w,"t_scan",sub.submissionId,v,"asm-scanner",c.ts(i));return kdetail(c.rec.asm,"produce");}});
+  add({from:"rsa",to:"t_scan",ch:"kafka",title:"RSA publishes its assessment",ref:"§2.1",
+    narr:"The control-maturity assessment is published to the same topic. Same key, same partition, so the two results stay in order for this submission.",
+    apply:(w,c,i)=>{const v={submissionId:sub.submissionId,applicationId:c.ids.app,scanType:"RSA",score:c.sc.rsa,grade:`${c.sc.rsa}/5`,findings:c.sc.rsaFindings,completedAt:c.ts(i)};c.rec.rsa=produce(w,"t_scan",sub.submissionId,v,"rsa-worker",c.ts(i));return kdetail(c.rec.rsa,"produce");}});
+  add({from:"t_enriched",to:"rider",ch:"kafka",dup:race?4:1,title:race?"Workbench consumes, drops 3 duplicates":"Workbench Kafka Rider consumes",ref:"§1.6 MassTransit riders, §2.4 idempotency",
+    narr:race?"The rider reads all four copies. The first is recorded in the inbox table; the next three have the same message ID and are acknowledged without being processed.":"The MassTransit Kafka rider inside the cyber-api process deserializes the Avro record into a typed C# SubmissionEnriched class and records the message ID in its inbox table.",
+    apply:(w,c,i)=>{const rs=c.rec.enriched;let g;rs.forEach((r,k)=>{g=consume(w,"cg-cyber-workbench",r);w.inbox.push({message_id:r.headers["message-id"],consumer:"SubmissionEnrichedConsumer",received:c.ts(i),outcome:k===0?"processed":"duplicate · skipped",offset:`${r.topic}[${r.partition}]@${r.offset}`});});
+      const d=kdetail(rs[0],"consume",g,"cyber-api-rider-0");d.kv.push(["Deserialized as","Pc.Clearance.Events.SubmissionEnriched (generated C#)"],["Inbox",rs.length>1?`1 processed, ${rs.length-1} skipped as duplicates`:"1 processed"]);return d;}});
+  add({from:"rider",to:"asb",ch:"sb",title:"Send StartRiskClearance command",ref:"§1.1 service bus integration",
+    narr:"Inside the bounded context, work moves as commands on Azure Service Bus. The session ID is the risk ID, so commands for one risk are processed one at a time, in order.",
+    apply:(w,c,i)=>{c.ids.risk=`WF-RISK-${w.ctr.risk++}`;return sbdetail(w,c,i,"StartRiskClearance",{riskId:c.ids.risk,submissionId:sub.submissionId,applicationId:c.ids.app,flow:nb?"NEW_BUSINESS":"RENEWAL",productCode:P.code,marketSegment:"MIDDLE_MARKET",priorPolicyNumber:sub.expiring?.policyNumber||null});}});
+  add({from:"asb",to:"lm",ch:"sb",title:"Lifecycle Manager starts the parent risk workflow",ref:"§3.2 parent workflow, §3.3 BPMN config",
+    narr:`The engine loads ${nb?"cyber-risk-clearance.bpmn":"cyber-risk-renewal.bpmn"} (version 7) from /config/lifecycle-manager/process/ and starts parent workflow ${"{risk}"}. The workflow state is a dynamic key-value collection.`,
+    apply:(w,c,i)=>{c.wfVersion=7;c.status="CLEARANCE_IN_PROGRESS";c.bpmn={cur:"p_start",done:[]};return {kv:[["Workflow",c.ids.risk],["Definition",`/config/lifecycle-manager/process/${nb?"cyber-risk-clearance":"cyber-risk-renewal"}.bpmn`],["Definition version","7 (latest)"],["Consumer","StartRiskClearanceConsumer (MassTransit)"],["Lock","session "+c.ids.risk+" · peek-lock 60s"]],payload:{flowState:{riskId:c.ids.risk,submissionId:sub.submissionId,applicationId:c.ids.app,"insured.name":sub.insured.name,"insured.state":sub.insured.address.state,"insured.naics":sub.insured.naics,"insured.revenue":String(sub.insured.revenue),"product.code":P.code,"classOfBusiness":P.cob.code,"segment":"MIDDLE_MARKET"}},note:"Teaching point (§1.2): values like revenue live in an untyped key-value bag. Code must check string vs number at runtime, and float maths here caused rounding errors in pricing."};}});
+  if(!nb){
+    add({from:"lm",to:"pg",ch:"sql",title:"Load the expiring risk's workflow stream",ref:"§3.5 versioning",
+      narr:`The renewal links to last year's risk workflow. Its stream was written under BPMN version 6.`,
+      apply:(w,c,i)=>{c.ids.priorRisk=`WF-RISK-${8800-(fnv(sub.expiring.policyNumber)%300)}`;return {sql:`SELECT data, mt_version\n  FROM cyber.mt_doc_flow_snapshot_projection\n WHERE id = '${c.ids.priorRisk}';\n-- 1 row · definitionVersion = 6`,kv:[["Prior risk",c.ids.priorRisk],["Stored definition version","6"],["Latest definition version","7"]]};}});
+    add({from:"lm",to:"lm",ch:"logic",task:["t_upgrade"],title:"Self-healing upgrade from v6 to v7",ref:"§3.5 self-healing upgrades",
+      narr:"On access, the engine notices the stored instance is on an older BPMN version and transforms its state to match version 7 before the renewal reads from it.",
+      apply:(w,c,i)=>({kv:[["Task","UpgradeFlowVersion : IHandleServiceTask"],["From → to","v6 → v7"],["Changes","rename node 'Scoring' → 'ScoringAlgorithm'; add field 'segment' = MIDDLE_MARKET"]],payload:{priorRisk:c.ids.priorRisk,upgradedTo:7,carriedForward:{expiringPolicyNumber:sub.expiring.policyNumber,expiringPremium:sub.expiring.premium,expiringLimit:sub.expiring.limit,priorOptionIds:sub.expiring.optionIds}}})});
+  }
+  add({from:"t_scan",to:"rider",ch:"kafka",title:"Rider picks up both scan results",ref:"§1.6",
+    narr:"The workbench also subscribes to pc.risk.scan.completed. Both results arrive on the same partition in order and are attached to the risk.",
+    apply:(w,c,i)=>{consume(w,"cg-cyber-workbench",c.rec.asm);const g=consume(w,"cg-cyber-workbench",c.rec.rsa);const d=kdetail(c.rec.asm,"consume",g,"cyber-api-rider-0");d.kv.push(["Also read",`${c.rec.rsa.topic}[${c.rec.rsa.partition}]@${c.rec.rsa.offset} (RSA)`]);return d;}});
+  add({from:"lm",to:"lm",ch:"logic",task:["t_clear","t_app","t_score"],title:"System task chain: clearance, appetite, scoring",ref:"§3.1 system tasks, §3.4 event batching",
+    narr:"Three system tasks run back to back. Each is a C# class named in the BPMN diagram and implements IHandleServiceTask.Execute(). Their events are staged in memory; nothing is written yet.",
+    apply:(w,c,i)=>{c.bpmn={cur:"p_score",done:["p_start","p_clear","p_app"]};return {evalRows:[
+      ["ClearanceCheck","no open submission for FEIN "+sub.insured.fein+"; sanctions screen clear; broker licensed in "+sub.broker.licenseState,true,"duplicate · sanctions · licensing"],
+      ["AppetiteValidation",`US · ${sub.insured.address.state} · NAICS ${sub.insured.naics} (${sub.insured.hazard}) · ${usdM(sub.insured.revenue)}`,true,"US risk, Middle Market (> $50M), NAICS in appetite"],
+      ["ScoringAlgorithm",`ASM ${c.sc.asm} (${c.sc.asmGrade}) · RSA ${c.sc.rsa}/5 → risk tier ${c.sc.asm>=750?"Preferred":c.sc.asm>=600?"Standard":"Refer"}`,true,"composite risk score"]],
+      kv:[["Staged events","ClearanceCleared, AppetiteValidated, ScanResultsAttached, RiskScored"],["Rollback rule","any failure discards the whole chain"]]};}});
+  add({from:"lm",to:"pg",ch:"sql",title:"Commit the chain to the event store",ref:"§3.4 Marten schema",
+    narr:"One transaction appends all staged events to mt_events (stream_id = risk ID) and, because the chain succeeded, a FlowSnapshot event plus the updated snapshot document.",
+    apply:(w,c,i)=>{const ev=appendEvents(w,c.ids.risk,["SubmissionReceived","ClearanceCleared","AppetiteValidated","ScanResultsAttached","RiskScored","FlowSnapshot"],c.ts(i),t=>evData(t,sub,c));c.status="AWAITING_RISK_DETAILS";snap(w,c,sub,i);c.bpmn={cur:"p_risk",done:["p_start","p_clear","p_app","p_score"]};return pgdetail(ev,c);}});
+  proj("risk cleared",c=>esdoc(sub,c),"RiskUpdated");
+  add({from:"browser",to:"api",ch:"http",task:["u_risk"],title:"Underwriter saves the Risk Details form",ref:"§1.1 UI latency, §3.1 user tasks",
+    narr:"The underwriter fills in the composite form (security controls, records, prior incidents) and saves. The API answers 202 Accepted in milliseconds. It has not validated anything yet.",
+    apply:(w,c,i)=>({kv:[["Method",`PUT /api/risks/${c.ids.risk}/tasks/complete-risk-details`],["Response","202 Accepted · 41 ms"],["Location",`/api/risks/${c.ids.risk}/status`]],payload:formAnswers(sub),note:"Teaching point (§1.1): a 202 means 'received', not 'valid'. If a field is wrong the error appears later, often on another screen."})});
+  add({from:"api",to:"asb",ch:"sb",title:"Send CompleteUserTask command",ref:"§1.1",
+    narr:"The controller wraps the form in a CompleteUserTask command and sends it on the same session as every other command for this risk.",
+    apply:(w,c,i)=>sbdetail(w,c,i,"CompleteUserTask",{riskId:c.ids.risk,taskId:"complete-risk-details",formId:"cyber-mm-risk-details",formVersion:3,answers:"(see form payload)"})});
+  add({from:"asb",to:"lm",ch:"sb",task:["u_risk"],title:"Form plugins apply the answers",ref:"§3.3 composite forms",
+    narr:"The user task completes. Form plugins validate and merge the answers into the workflow state.",
+    apply:(w,c,i)=>{c.bpmn={cur:"p_spawn",done:["p_start","p_clear","p_app","p_score","p_risk"]};return {kv:[["Task","Complete Risk Details (user task)"],["Validation","passed"],["Next node","Spawn quote (call activity)"]]};}});
+  add({from:"lm",to:"pg",ch:"sql",title:"Append RiskFormSaved",ref:"§3.4",
+    narr:"The saved form becomes an event on the risk stream.",
+    apply:(w,c,i)=>{const ev=appendEvents(w,c.ids.risk,["RiskFormSaved"],c.ts(i),t=>evData(t,sub,c));return pgdetail(ev,c);}});
+  add({from:"lm",to:"t_form",ch:"kafka",title:"Publish RiskFormUpdated for analytics",ref:"§2.3 dynamic form publishing",
+    narr:"Every form save publishes a granular domain event with the answer groups, risk metadata and status, keyed by risk ID.",
+    apply:(w,c,i)=>{const v={riskId:c.ids.risk,submissionId:sub.submissionId,formId:"cyber-mm-risk-details",formVersion:3,answerGroups:formAnswers(sub).answerGroups,status:c.status,savedBy:"uw.jlee",savedAt:c.ts(i)};c.rec.form=produce(w,"t_form",c.ids.risk,v,"cyber-api",c.ts(i));return kdetail(c.rec.form,"produce");}});
+  add({from:"t_form",to:"connect",ch:"connect",title:"Kafka Connect reads the form event",ref:"§2.3 Snowflake ingestion",
+    narr:"The managed Snowflake sink connector is just another consumer group (connect-snowflake-sink-cyber).",
+    apply:(w,c,i)=>{const g=consume(w,"connect-snowflake-sink-cyber",c.rec.form);return kdetail(c.rec.form,"consume",g,"snowflake-sink-cyber-task-0");}});
+  add({from:"connect",to:"snow",ch:"connect",title:"Row lands in Snowflake",ref:"§2.3",
+    narr:"The event lands as a VARIANT column. Analytics pipelines later flatten it into 400+ typed attributes.",
+    apply:(w,c,i)=>{const row={RECORD_METADATA:{topic:c.rec.form.topic,partition:c.rec.form.partition,offset:c.rec.form.offset,key:c.rec.form.key,CreateTime:c.ts(i)},RECORD_CONTENT:c.rec.form.value};w.snow.RISK_FORM_EVENTS.push(row);return {kv:[["Table","CYBER_DW.RAW.RISK_FORM_EVENTS"],["Ingest","Snowpipe Streaming · channel cyber_form_p"+c.rec.form.partition]],payload:row};}});
+  add({from:"lm",to:"lm",ch:"logic",task:["t_rate"],title:"Parent spawns the child quote workflow and rates it",ref:"§3.2 parent-child hierarchy",
+    narr:`The parent starts child workflow ${"{quote}"} (${P.bpmnQuote}). The RatingEngine system task builds the worksheet. The parent learns about it through IHandleChangeMadeToChild.`,
+    apply:(w,c,i)=>{c.ids.quote=`WF-QUOTE-${w.ctr.quote++}`;c.rt=rate(sub,c.sc);c.status="QUOTE_RATED";c.bpmn={cur:"c_review",done:["p_start","p_clear","p_app","p_score","p_risk","p_spawn","c_start","c_rate"]};
+      return {kv:[["Child workflow",c.ids.quote],["Parent link",c.ids.risk],["Definition",P.bpmnQuote+" v4"],["Handler on parent","IHandleChangeMadeToChild.OnChildChanged()"]],rating:c.rt};}});
+  add({from:"lm",to:"pg",ch:"sql",title:"Append quote events and FlowSnapshot",ref:"§3.4",
+    narr:"Quote events go on the child's own stream, and the parent stream records the link. FlowSnapshot is appended because the chain completed.",
+    apply:(w,c,i)=>{const e1=appendEvents(w,c.ids.quote,["QuoteWorkflowStarted","QuoteRated","FlowSnapshot"],c.ts(i),t=>evData(t,sub,c));const e2=appendEvents(w,c.ids.risk,["ChildQuoteLinked"],c.ts(i),t=>evData(t,sub,c));snap(w,c,sub,i);return pgdetail(e1.concat(e2),c);}});
+  proj("quote rated",c=>esdoc(sub,c),"QuoteUpdated");
+  add({from:"browser",to:"api",ch:"http",task:["u_quote"],title:"Underwriter issues the quote",ref:"§3.1 user tasks",
+    narr:"The underwriter reviews the worksheet and clicks Issue quote.",
+    apply:(w,c,i)=>({kv:[["Method",`POST /api/quotes/${c.ids.quote}/issue`],["Response","202 Accepted · 37 ms"]],payload:{quoteId:c.ids.quote,limit:sub.limit,retention:sub.retention,premium:c.rt.premium,subjectivities:["Signed application within 30 days","Confirmation of MFA on remote access"]}})});
+  add({from:"api",to:"asb",ch:"sb",title:"Send IssueQuote command",ref:"§1.1",narr:"Same pattern: command on the risk's session.",
+    apply:(w,c,i)=>sbdetail(w,c,i,"IssueQuote",{riskId:c.ids.risk,quoteId:c.ids.quote})});
+  add({from:"asb",to:"lm",ch:"sb",task:["u_quote"],title:"Child issues the quote; parent is notified",ref:"§3.2 bi-directional handlers",
+    narr:"The child workflow moves to Quote Issued and the parent's IHandleChangeMadeToChild handler moves the risk to QUOTED.",
+    apply:(w,c,i)=>{c.ids.quoteNo=`Q-CY-2026-${pad(w.ctr.quoteNo++ + 5120,6)}`;c.status="QUOTED";c.bpmn={cur:"p_bindreq",done:["p_start","p_clear","p_app","p_score","p_risk","p_spawn","c_start","c_rate","c_review","c_issued"]};
+      return {kv:[["Quote number",c.ids.quoteNo],["Valid until",addDays(c.ts(i).slice(0,10),30)],["Parent status","QUOTED"]]};}});
+  add({from:"lm",to:"pg",ch:"sql",title:"Append QuoteIssued",ref:"§3.4",narr:"Both streams get their events in one transaction.",
+    apply:(w,c,i)=>{const ev=appendEvents(w,c.ids.quote,["QuoteIssued"],c.ts(i),t=>evData(t,sub,c)).concat(appendEvents(w,c.ids.risk,["RiskQuoted"],c.ts(i),t=>evData(t,sub,c)));snap(w,c,sub,i);return pgdetail(ev,c);}});
+  add({from:"lm",to:"t_quote",ch:"kafka",title:"Publish QuoteIssued",ref:"§1.6",
+    narr:"The issued quote becomes a cross-domain event for document generation, broker notification and analytics.",
+    apply:(w,c,i)=>{const v={quoteId:c.ids.quote,quoteNumber:c.ids.quoteNo,riskId:c.ids.risk,submissionId:sub.submissionId,applicationId:c.ids.app,productCode:P.code,limitUsd:sub.limit,retentionUsd:sub.retention,premium:c.rt.premium.toFixed(2),feesUsd:c.rt.fee.toFixed(2),validUntil:addDays(c.ts(i).slice(0,10),30),issuedAt:c.ts(i)};c.rec.quote=produce(w,"t_quote",c.ids.risk,v,"cyber-api",c.ts(i));return kdetail(c.rec.quote,"produce");}});
+  proj("quote issued",c=>esdoc(sub,c),"QuoteIssued");
+  add({from:"browser",to:"api",ch:"http",task:["u_bind"],title:"Underwriter requests bind",ref:"§3.1",
+    narr:"The broker accepts the quote (outside this lab) and the underwriter clicks Bind.",
+    apply:(w,c,i)=>({kv:[["Method",`POST /api/risks/${c.ids.risk}/bind`],["Response","202 Accepted · 44 ms"]],payload:{quoteId:c.ids.quote,quoteNumber:c.ids.quoteNo,effectiveDate:sub.effective,paymentPlan:"Annual",billing:"Agency bill"}})});
+  add({from:"api",to:"asb",ch:"sb",title:"Send BindPolicy command",ref:"§1.1",narr:"The bind command joins the risk's session queue.",
+    apply:(w,c,i)=>sbdetail(w,c,i,"BindPolicy",{riskId:c.ids.risk,quoteId:c.ids.quote})});
+  add({from:"asb",to:"lm",ch:"sb",task:["u_bind","t_bind"],title:"BindPolicy system task runs",ref:"§3.1, §3.2",
+    narr:"BindPolicy checks subjectivities and authority, assigns the policy number and closes both workflows. The child tells the parent through IHandleChangeMadeToChild; the parent tells remaining children through IHandleChangeMadeToParent.",
+    apply:(w,c,i)=>{c.ids.policy=`CYB-MM-2026-${pad(w.ctr.policy++ +7400,6)}`;c.status="BOUND";c.bpmn={cur:"p_end",done:["p_start","p_clear","p_app","p_score","p_risk","p_spawn","p_bindreq","p_bind","c_start","c_rate","c_review","c_issued","c_end"]};
+      return {kv:[["Policy number",c.ids.policy],["Transaction",nb?"New business":"Renewal of "+sub.expiring.policyNumber],["Term",`${sub.effective} → ${sub.expiration}`],["Checks","subjectivities: 2 prior-to-bind received · authority: UW level 2"]]};}});
+  add({from:"lm",to:"pg",ch:"sql",title:"Append PolicyBound and final FlowSnapshot",ref:"§3.4",narr:"The final events close the parent and child streams.",
+    apply:(w,c,i)=>{const ev=appendEvents(w,c.ids.quote,["QuoteBound","FlowSnapshot"],c.ts(i),t=>evData(t,sub,c)).concat(appendEvents(w,c.ids.risk,["PolicyBound","FlowSnapshot"],c.ts(i),t=>evData(t,sub,c)));snap(w,c,sub,i);return pgdetail(ev,c);}});
+  add({from:"lm",to:"t_bound",ch:"kafka",title:"Publish PolicyBound",ref:"§1.6, brief: relay to PAS",
+    narr:"The bound policy is published with everything a downstream system needs: insured, broker, product, class of business, NAICS, state, term, limit, retention and premium.",
+    apply:(w,c,i)=>{c.rec.bound=produce(w,"t_bound",c.ids.risk,boundValue(sub,c,i),"cyber-api",c.ts(i));return kdetail(c.rec.bound,"produce");}});
+  add({from:"t_bound",to:"pas",ch:"kafka",title:"Policy Admin System consumes",ref:"brief: PAS out of scope",
+    narr:"The PAS issues the policy from this event. It is out of scope here, but its consumer group and offsets are real: it could replay every bound policy from offset 0.",
+    apply:(w,c,i)=>{const g=consume(w,"cg-pas-policy-issuance",c.rec.bound);return kdetail(c.rec.bound,"consume",g,"pas-issuance-0");}});
+  add({from:"t_bound",to:"connect",ch:"connect",title:"Kafka Connect reads PolicyBound",ref:"§2.3",narr:"The same Snowflake sink also subscribes to pc.policy.bound.",
+    apply:(w,c,i)=>{const g=consume(w,"connect-snowflake-sink-cyber",c.rec.bound);return kdetail(c.rec.bound,"consume",g,"snowflake-sink-cyber-task-1");}});
+  add({from:"connect",to:"snow",ch:"connect",title:"Bound policy lands in Snowflake",ref:"§2.3",narr:"Analysts can now join this policy to its submission, form answers and industry benchmarks.",
+    apply:(w,c,i)=>{const row={RECORD_METADATA:{topic:c.rec.bound.topic,partition:c.rec.bound.partition,offset:c.rec.bound.offset,key:c.rec.bound.key},RECORD_CONTENT:c.rec.bound.value};w.snow.POLICY_BOUND.push(row);return {kv:[["Table","CYBER_DW.RAW.POLICY_BOUND"]],payload:row};}});
+  proj("bound",c=>esdoc(sub,c),"PolicyBound","Teaching point (§1.3): if this push failed, Elasticsearch would say BOUND while this browser still showed QUOTED until refresh.");
+  return S;
+}
+
+/* payload builders */
+function acord(sub){const P=PRODUCTS[sub.product];return {submissionId:sub.submissionId,transaction:sub.flow==="NB"?"NEW_BUSINESS":"RENEWAL",lineOfBusiness:"CYBER",product:{code:P.code,name:P.name},classOfBusiness:P.cob,
+  insured:{name:sub.insured.name,fein:sub.insured.fein,address:sub.insured.address,naics:{code:sub.insured.naics,title:sub.insured.naicsTitle},sic:sub.insured.sic,annualRevenueUsd:sub.insured.revenue,employees:sub.insured.emps,yearsInBusiness:sub.insured.yib,primaryDomain:sub.insured.domain,sensitiveRecords:sub.insured.records},
+  producer:{firm:sub.broker.firm,producerCode:sub.broker.producerCode,npn:sub.broker.npn,contact:sub.broker.contact,email:sub.broker.email,licenseState:sub.broker.licenseState,office:sub.broker.city},
+  requested:{effectiveDate:sub.effective,expirationDate:sub.expiration,limitUsd:sub.limit,retentionUsd:sub.retention},expiringPolicy:sub.expiring||null};}
+function receivedValue(sub,c){const P=PRODUCTS[sub.product];return {submissionId:sub.submissionId,processStatus:sub.flow==="NB"?"CLEARANCE_OF_NEW_BUSINESS":"CLEARANCE_OF_RENEWAL",companyCode:P.companyCode,productName:P.filterProductName,productCode:P.code,classOfBusiness:P.cob,
+  insured:{name:sub.insured.name,fein:sub.insured.fein,address:{street:sub.insured.address.street,city:sub.insured.address.city,state:sub.insured.address.state,postalCode:sub.insured.address.zip,country:"US"},naicsCode:sub.insured.naics,naicsTitle:sub.insured.naicsTitle,sicCode:sub.insured.sic,annualRevenueUsd:sub.insured.revenue,employeeCount:sub.insured.emps,primaryDomain:sub.insured.domain,sensitiveRecordCount:sub.insured.records},
+  broker:{firmName:sub.broker.firm,producerCode:sub.broker.producerCode,npn:sub.broker.npn,licenseState:sub.broker.licenseState,contactName:sub.broker.contact,email:sub.broker.email},
+  requested:{effectiveDate:sub.effective,limitUsd:sub.limit,retentionUsd:sub.retention},expiringPolicyNumber:sub.expiring?.policyNumber||null,receivedAt:c.t0iso};}
+function enrichedValue(sub,c,el,i){return {submissionId:sub.submissionId,applicationId:c.ids.app,processStatus:sub.flow==="NB"?"CLEARANCE_OF_NEW_BUSINESS":"CLEARANCE_OF_RENEWAL",companyCode:PRODUCTS[sub.product].companyCode,productName:PRODUCTS[sub.product].filterProductName,marketSegment:"MIDDLE_MARKET",priorPolicyNumber:sub.expiring?.policyNumber||null,priorOptionIds:sub.expiring?.optionIds||[],submission:"{ …SubmissionReceived (nested) }",enrichedAt:c.ts(i)};}
+function boundValue(sub,c,i){const P=PRODUCTS[sub.product];return {policyNumber:c.ids.policy,transactionType:sub.flow==="NB"?"NEW_BUSINESS":"RENEWAL",quoteId:c.ids.quote,riskId:c.ids.risk,submissionId:sub.submissionId,applicationId:c.ids.app,priorPolicyNumber:sub.expiring?.policyNumber||null,
+  insured:{name:sub.insured.name,fein:sub.insured.fein,address:{street:sub.insured.address.street,city:sub.insured.address.city,state:sub.insured.address.state,postalCode:sub.insured.address.zip,country:"US"},naicsCode:sub.insured.naics,naicsTitle:sub.insured.naicsTitle,sicCode:sub.insured.sic,annualRevenueUsd:sub.insured.revenue,employeeCount:sub.insured.emps,primaryDomain:sub.insured.domain,sensitiveRecordCount:sub.insured.records},
+  broker:{firmName:sub.broker.firm,producerCode:sub.broker.producerCode,npn:sub.broker.npn,licenseState:sub.broker.licenseState,contactName:sub.broker.contact,email:sub.broker.email},
+  productCode:P.code,classOfBusiness:P.cob,naicsCode:sub.insured.naics,riskState:sub.insured.address.state,effectiveDate:sub.effective,expirationDate:sub.expiration,limitUsd:sub.limit,retentionUsd:sub.retention,annualPremium:c.rt.premium.toFixed(2),boundAt:c.ts(i)};}
+function formAnswers(sub){const h=fnv(sub.insured.fein);const yn=b=>b?"Yes":"No";return {formId:"cyber-mm-risk-details",formVersion:3,answerGroups:{
+  accessControl:[{key:"MFA_REMOTE",value:yn(h&1||1),valueType:"bool"},{key:"MFA_EMAIL",value:yn(h&2),valueType:"bool"},{key:"MFA_PRIVILEGED",value:yn(h&4),valueType:"bool"}],
+  endpoint:[{key:"EDR",value:"Yes",valueType:"bool"},{key:"MDR_SOC",value:yn(h&8),valueType:"bool"}],
+  backups:[{key:"BACKUPS_OFFLINE",value:yn(h&16||1),valueType:"bool"},{key:"BACKUP_TESTED",value:yn(h&32),valueType:"bool"}],
+  data:[{key:"SENSITIVE_RECORDS",value:String(sub.insured.records),valueType:"int"},{key:"ENCRYPTION_AT_REST",value:"Yes",valueType:"bool"}],
+  history:[{key:"PRIOR_INCIDENTS_3Y",value:String(h%3===0?1:0),valueType:"int"},{key:"PENDING_CLAIMS",value:"No",valueType:"bool"}]}};}
+function evData(type,sub,c){
+  switch(type){
+    case "SubmissionReceived":return {submissionId:sub.submissionId,applicationId:c.ids.app,insured:sub.insured.name,state:sub.insured.address.state,naics:sub.insured.naics};
+    case "ClearanceCleared":return {checks:["duplicate","sanctions","producer-licensing"],result:"CLEAR"};
+    case "AppetiteValidated":return {country:"US",segment:"MIDDLE_MARKET",revenue:sub.insured.revenue,naics:sub.insured.naics,hazard:sub.insured.hazard};
+    case "ScanResultsAttached":return {asm:c.sc.asm,asmGrade:c.sc.asmGrade,rsa:c.sc.rsa};
+    case "RiskScored":return {tier:c.sc.asm>=750?"Preferred":c.sc.asm>=600?"Standard":"Refer"};
+    case "RiskFormSaved":return {formId:"cyber-mm-risk-details",formVersion:3};
+    case "QuoteWorkflowStarted":return {parent:c.ids.risk,definition:PRODUCTS[sub.product].bpmnQuote};
+    case "QuoteRated":return {limit:sub.limit,retention:sub.retention,premium:c.rt.premium};
+    case "ChildQuoteLinked":return {child:c.ids.quote};
+    case "QuoteIssued":return {quoteNumber:c.ids.quoteNo};
+    case "RiskQuoted":return {quoteId:c.ids.quote};
+    case "QuoteBound":case "PolicyBound":return {policyNumber:c.ids.policy,premium:c.rt.premium};
+    case "FlowSnapshot":return {status:c.status,definitionVersion:7};
+  }
+  return {};
+}
+function snap(w,c,sub,i){
+  w.snapshots[c.ids.risk]={id:c.ids.risk,data:{riskId:c.ids.risk,submissionId:sub.submissionId,applicationId:c.ids.app,status:c.status,definition:sub.flow==="NB"?"cyber-risk-clearance":"cyber-risk-renewal",definitionVersion:7,childQuotes:c.ids.quote?[c.ids.quote]:[],policyNumber:c.ids.policy||null},mt_last_modified:c.ts(i),mt_version:uuid(c.ids.risk+i)};
+  if(c.ids.quote) w.snapshots[c.ids.quote]={id:c.ids.quote,data:{quoteId:c.ids.quote,parent:c.ids.risk,status:c.status==="BOUND"?"BOUND":c.status==="QUOTED"?"ISSUED":"RATED",premium:c.rt?.premium,quoteNumber:c.ids.quoteNo||null},mt_last_modified:c.ts(i),mt_version:uuid(c.ids.quote+i)};
+}
+function esdoc(sub,c){const P=PRODUCTS[sub.product];return {riskId:c.ids.risk,submissionId:sub.submissionId,applicationId:c.ids.app,status:c.status,insuredName:sub.insured.name,state:sub.insured.address.state,naics:sub.insured.naics,product:P.name,classOfBusiness:P.cob.code,segment:"Middle Market",isRenewal:sub.flow==="RN",assignee:"uw.jlee",broker:sub.broker.firm,revenueUsd:sub.insured.revenue,asmScore:c.sc?.asm,premium:c.rt?.premium??null,quoteNumber:c.ids.quoteNo||null,policyNumber:c.ids.policy||null};}
+
+/* detail builders */
+function kdetail(r,mode,g,member){
+  const kv=[["Operation",mode==="produce"?"PRODUCE":"CONSUME (poll)"],["Topic",r.topic],["Partition",`${r.partition}  (hash(key) mod 6 · murmur2 in real clients)`],["Offset",String(r.offset)],["Partition leader",`${r.leader} · ISR [${[0,1,2].map(b=>"broker-"+b).join(", ")}]`],["Key",r.key]];
+  if(mode==="produce") kv.push(["Producer",`client.id=${r.producer} · acks=all · enable.idempotence=true`],["Schema",`${TOPICS.find(t=>t.name===r.topic).schema.subject} · id ${r.schemaId}`],["Timestamp",r.ts]);
+  else kv.push(["Consumer group",g.group],["Member",member],["Committed offset",`${g.k} → ${g.committed}`],["Lag after commit","0"]);
+  return {kv,headers:r.headers,payload:r.value,schema:AVRO[r.tid]};
+}
+function sbdetail(w,c,i,type,body){
+  const m={messageId:uuid(type+c.ids.risk+i),correlationId:sub0().submissionId,conversationId:uuid(c.ids.risk),sessionId:c.ids.risk,messageType:[`urn:message:Pc.Clearance.Commands:${type}`],sourceAddress:"sb://sb-cyber-eus2.servicebus.windows.net/cyber-api_bus",destinationAddress:"sb://sb-cyber-eus2.servicebus.windows.net/lm-commands",sentTime:c.ts(i),message:body};
+  w.sb.push({ts:c.ts(i),entity:"lm-commands",sessionId:c.ids.risk,type,messageId:m.messageId,state:"Completed"});
+  return {kv:[["Namespace","sb-cyber-eus2.servicebus.windows.net (private endpoint)"],["Entity","queue lm-commands"],["Session ID",c.ids.risk],["Message type",type],["Delivery","peek-lock · max 10 deliveries → DLQ"],["Serializer","MassTransit JSON envelope"]],payload:m};
+}
+function pgdetail(ev,c){
+  const vals=ev.map(e=>`  (${e.seq_id}, '${e.id.slice(0,8)}…', '${e.stream_id}', ${e.version}, '${e.type}', '{…}')`).join(",\n");
+  return {kv:[["Server","psql-cyber-api.postgres.database.azure.com (private)"],["Database","cyber_api_db · schema cyber"],["Events appended",String(ev.length)],["Streams",[...new Set(ev.map(e=>e.stream_id))].join(", ")],["Isolation","one transaction · all or nothing"]],
+    sql:`BEGIN;\nINSERT INTO cyber.mt_events\n  (seq_id, id, stream_id, version, type, data)\nVALUES\n${vals};\n${ev.some(e=>e.type==="FlowSnapshot")?"\nINSERT INTO cyber.mt_doc_flow_snapshot_projection (id, data, mt_version)\nVALUES (...) ON CONFLICT (id) DO UPDATE ...;\n":""}COMMIT;`,events:ev};
+}
+const sub0=()=>run.sub;
+
+/* ============================================================ run engine */
+function makeCtx(sub){const t0=Date.parse(sub.createdAt);return {sub,t0,t0iso:new Date(t0).toISOString(),ts:i=>new Date(t0+i*1900+Math.round(fnv(sub.submissionId+i)%700)).toISOString(),ids:{},rec:{},status:"NEW",bpmn:{cur:null,done:[]}};}
+function startRun(sub){
+  stopPlay();
+  if(sub.flow==="RN"&&sub.expiring?.policyNumber&&!world.legacy.policies.find(p=>p.POLICY_NUMBER===sub.expiring.policyNumber)){
+    world.legacy.policies.push({POLICY_NUMBER:sub.expiring.policyNumber,FEIN:sub.insured.fein,INSURED_NAME:sub.insured.name,PRODUCT:PRODUCTS[sub.product].name,EFFECTIVE_DATE:addYears(sub.effective,-1),EXPIRATION_DATE:sub.effective,LIMIT:sub.expiring.limit,ANNUAL_PREMIUM:sub.expiring.premium,OPTION_IDS:sub.expiring.optionIds.join(",")});
+  }
+  run={sub,steps:buildSteps(sub),idx:-1,snap:structuredClone(world),ctx:makeCtx(sub),details:[]};
+  selected=null; renderAll(); setNarr();
+}
+function applyTo(n){ // replay from snapshot to step n (inclusive)
+  world=structuredClone(run.snap); run.ctx=makeCtx(run.sub); run.details=[];
+  for(let i=0;i<=n;i++){run.details[i]=run.steps[i].apply(world,run.ctx,i)||{};}
+  run.idx=n;
+}
+function stepForward(animate=true){
+  if(!run||run.idx>=run.steps.length-1)return false;
+  const i=run.idx+1; run.details[i]=run.steps[i].apply(world,run.ctx,i)||{}; run.idx=i;
+  run.sub.status=run.ctx.status; selected=null;
+  renderAll(); if(animate) fly(run.steps[i]); return true;
+}
+function jumpTo(n){if(!run)return;stopPlay();clearFlights();if(n<0){world=structuredClone(run.snap);run.ctx=makeCtx(run.sub);run.details=[];run.idx=-1;}else applyTo(n);run.sub.status=run.ctx.status;selected=null;renderAll();if(n>=0)fly(run.steps[n],true);}
+let playing=false, timer=null, speed=1;
+function stopPlay(){playing=false;clearTimeout(timer);$("#bPlay").textContent="▶ Play";}
+function play(){
+  if(!run)return; if(run.idx>=run.steps.length-1) jumpTo(-1);
+  playing=true;$("#bPlay").textContent="❚❚ Pause";
+  const tick=()=>{if(!playing)return;const ok=stepForward(true);if(!ok){stopPlay();return;}timer=setTimeout(tick,(hopMs()+900)/1);};tick();
+}
+const hopMs=()=>reduce?0:Math.round(1100/speed);
+const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ============================================================ SVG drawing */
+const SVGNS="http://www.w3.org/2000/svg";
+const el=(tag,attrs,parent,text)=>{const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(text!=null)e.textContent=text;if(parent)parent.appendChild(e);return e;};
+let gFlights, gTrails;
+function drawMap(){
+  const svg=$("#arch"); svg.innerHTML="";
+  const defs=el("defs",{},svg);
+  for(const z of ZONES){const g=el("g",{},svg);el("rect",{x:z.x,y:z.y,width:z.w,height:z.h,rx:z.cls==="proc"?6:10,class:"zone "+(z.cls||"")},g);
+    if(z.l) el("text",{x:z.x+12,y:z.y+20,class:"zl"},g,z.l);
+    el("text",{x:z.cls==="proc"?z.x+z.w-10:z.sx?z.x+z.sx:z.x+12,y:z.cls==="proc"?z.y+16:z.sx?z.y+20:z.y+(z.l?35:20),class:"zs","text-anchor":z.cls==="proc"?"end":"start"},g,z.s);}
+  // kafka broker chips
+  [0,1,2].forEach(b=>{const x=240+b*410,g=el("g",{id:"broker-"+b},svg);el("rect",{x,y:160,width:395,height:52,rx:8,class:"zone",fill:"var(--panel)"},g);
+    el("text",{x:x+14,y:182,class:"node t",style:"font-size:12.5px;font-weight:600;fill:var(--ink)"},g,`broker-${b}`);
+    el("text",{x:x+14,y:200,class:"zs",id:"brk"+b},g,`leader for partitions ${b} and ${b+3} of every topic · AZ ${b+1}`);});
+  const kx=28; const g0=el("g",{},svg);el("rect",{x:kx,y:160,width:180,height:52,rx:8,class:"zone",fill:"var(--panel)"},g0);
+  el("text",{x:kx+12,y:182,class:"zs",style:"fill:var(--muted)"},g0,"RF=3 · min.insync=2");el("text",{x:kx+12,y:200,class:"zs"},g0,"SASL_SSL · Private Link");
+  const g1=el("g",{},svg);el("rect",{x:1480,y:160,width:195,height:52,rx:8,class:"zone",fill:"var(--panel)"},g1);
+  el("text",{x:1492,y:182,class:"zs",style:"fill:var(--muted)"},g1,"migrated from on-prem brokers");el("text",{x:1492,y:200,class:"zs"},g1,"no hybrid network hops (§2.5)");
+  gTrails=el("g",{},svg);
+  for(const n of NODES){
+    const g=el("g",{class:"node"+(n.out?" out":""),id:"n-"+n.id,tabindex:0,role:"button","aria-label":n.t},svg);
+    el("rect",{x:n.x,y:n.y,width:n.w,height:n.h,rx:8,class:"box"},g);
+    el("line",{x1:n.x+1,y1:n.y+8,x2:n.x+1,y2:n.y+n.h-8,class:"stripe",style:`stroke:var(${n.k})`},g);
+    el("text",{x:n.x+14,y:n.y+22,class:"t",style:n.topic?"font-family:var(--f-mono);font-size:12px":""},g,n.t);
+    n.s.forEach((s,i)=>el("text",{x:n.x+14,y:n.y+39+i*15,class:"s"},g,s));
+    const b=el("g",{class:"badge",id:"b-"+n.id,visibility:"hidden"},g);el("rect",{x:n.x+n.w-44,y:n.y-9,width:40,height:18,rx:9},b);el("text",{x:n.x+n.w-24,y:n.y+4,"text-anchor":"middle"},b,"0");
+    g.addEventListener("click",()=>selectNode(n.id));g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();selectNode(n.id);}});
+  }
+  // LM internals
+  const lm=NODE.lm, gl=$("#n-lm");
+  const chip=(id,x,y,w,h,t1,t2,cls)=>{const g=el("g",{class:"inner "+(cls||""),id:"i-"+id},gl);el("rect",{x,y,width:w,height:h,rx:6},g);el("text",{x:x+10,y:y+(t2?20:20),class:"tk"},g,t1);if(t2)el("text",{x:x+10,y:y+36,class:"m",id:"i2-"+id},g,t2);return g;};
+  chip("parent",545,412,226,52,"Parent risk workflow","WF-RISK-····  ·  v7");
+  chip("child",785,412,220,52,"Child quote workflow","WF-QUOTE-····  ·  v4");
+  el("text",{x:545,y:480,class:"zs",style:"fill:var(--muted)"},gl,"SYSTEM TASKS · class : IHandleServiceTask · Execute()");
+  LM_TASKS.filter(t=>t.row==="sys").forEach(t=>chip(t.id,t.x,t.y,148,30,t.t));
+  el("text",{x:545,y:574,class:"zs",style:"fill:var(--muted)"},gl,"USER TASKS · composite forms · form plugins prefill");
+  LM_TASKS.filter(t=>t.row==="user").forEach(t=>chip(t.id,t.x,t.y,148,30,t.t));
+  el("text",{x:545,y:640,class:"zs"},gl,"IHandleChangeMadeToParent ⇄ IHandleChangeMadeToChild");
+  el("text",{x:545,y:654,class:"zs"},gl,"/config/lifecycle-manager/process/*.bpmn");
+  // PG internals
+  const gp=$("#n-pg");
+  [["mt_events","append-only · stream_id = risk id",335,782],["mt_doc_flow_snapshot_projection","current state per workflow",580,782],["mt_event_progression","outbox high-water mark",335,868],["inbox_state","MassTransit inbox · idempotency",580,868]]
+   .forEach(([t,s,x,y])=>{const g=el("g",{class:"inner",id:"pgt-"+t},gp);el("rect",{x,y,width:235,height:74,rx:6},g);el("text",{x:x+10,y:y+20,style:"font-family:var(--f-mono);font-size:11px"},g,t);el("text",{x:x+10,y:y+37,class:"m"},g,s);el("text",{x:x+10,y:y+60,style:"font-family:var(--f-display);font-size:16px;font-weight:600",id:"pgc-"+t},g,"0 rows");});
+  const ge=$("#n-es");const gg=el("g",{class:"inner"},ge);el("rect",{x:887,y:800,width:131,height:84,rx:6},gg);el("text",{x:897,y:820,class:"m"},gg,"documents");el("text",{x:897,y:850,style:"font-family:var(--f-display);font-size:26px;font-weight:700",id:"esCount"},gg,"0");el("text",{x:897,y:872,class:"m"},gg,"_doc per risk id");
+  el("text",{x:887,y:910,class:"zs"},ge,"filters: state,");el("text",{x:887,y:924,class:"zs"},ge,"assignee, renewal");
+  gFlights=el("g",{},svg);
+}
+function pointsOf(id){const n=NODE[id];return {x:n.x+n.w/2,y:n.y+n.h/2,n};}
+function edgePoint(a,b){ // where segment from centre a toward b leaves a's box
+  const n=a.n, dx=b.x-a.x, dy=b.y-a.y; if(!dx&&!dy)return {x:a.x,y:a.y};
+  const sx=dx?(n.w/2)/Math.abs(dx):Infinity, sy=dy?(n.h/2)/Math.abs(dy):Infinity, s=Math.min(sx,sy);
+  return {x:a.x+dx*s,y:a.y+dy*s};
+}
+function pathFor(from,to,bend){
+  const A=pointsOf(from),B=pointsOf(to);const p1=edgePoint(A,B),p2=edgePoint(B,A);
+  const mx=(p1.x+p2.x)/2,my=(p1.y+p2.y)/2,dx=p2.x-p1.x,dy=p2.y-p1.y,L=Math.hypot(dx,dy)||1;const k=bend*Math.min(90,L*0.18);
+  return `M${p1.x.toFixed(1)} ${p1.y.toFixed(1)} Q${(mx-dy/L*k).toFixed(1)} ${(my+dx/L*k).toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+}
+function clearFlights(){if(gFlights)gFlights.innerHTML="";}
+let flightId=0;
+function fly(step,instant){
+  const id=++flightId; clearFlights();
+  const col=`var(${CH[step.ch].color})`;
+  if(step.from===step.to){ // in-process
+    const n=NODE[step.from];const c=el("circle",{cx:n.x+n.w/2,cy:n.y+n.h/2,r:10,fill:"none",stroke:col,"stroke-width":3},gFlights);
+    if(!reduce&&!instant){c.animate([{r:10,opacity:1},{r:Math.max(n.w,n.h)/1.6,opacity:0}],{duration:Math.max(500,hopMs()),iterations:2});}
+    return;
+  }
+  const d=pathFor(step.from,step.to,(run&&run.idx%2?1:-1));
+  el("path",{d,class:"trail",style:`stroke:${col}`},gTrails);
+  while(gTrails.childNodes.length>6) gTrails.removeChild(gTrails.firstChild);
+  const path=el("path",{d,class:"flight",style:`stroke:${col}`},gFlights);
+  const L=path.getTotalLength();
+  const lab=CH[step.ch].label+(step.dup>1?` ×${step.dup}`:"");
+  const n=step.dup||1, dots=[];
+  for(let k=0;k<n;k++) dots.push(el("circle",{r:8,class:"pkt",style:`fill:${col}`},gFlights));
+  const tw=lab.length*6.9+16; const tg=el("g",{},gFlights); const tr=el("rect",{width:tw,height:20,rx:10,style:`fill:var(--panel);stroke:${col}`},tg); const tt=el("text",{class:"pktlabel",style:`fill:${col}`,x:8,y:14},tg,lab);
+  const place=(f)=>{dots.forEach((dot,k)=>{const ff=Math.max(0,Math.min(1,f-k*0.08));const p=path.getPointAtLength(L*ff);dot.setAttribute("cx",p.x);dot.setAttribute("cy",p.y);});const p=path.getPointAtLength(L*Math.min(1,f));tg.setAttribute("transform",`translate(${(p.x+12).toFixed(1)},${(p.y-26).toFixed(1)})`);};
+  path.style.strokeDasharray=L;path.style.strokeDashoffset=L;
+  if(reduce||instant){place(1+0.08*n);path.style.strokeDashoffset=0;return;}
+  const dur=hopMs(), t0=performance.now();
+  const frame=t=>{if(id!==flightId)return;const f=Math.min(1+0.08*(n-1),(t-t0)/dur);path.style.strokeDashoffset=L*(1-Math.min(1,f));place(f);if(f<1+0.08*(n-1))requestAnimationFrame(frame);};
+  requestAnimationFrame(frame);
+}
+
+/* ============================================================ rendering */
+let selected=null, tab="timeline";
+function renderAll(){renderMapState();renderInspector();renderDrawer();renderQueue();renderCard();renderControls();}
+function renderControls(){
+  const has=!!run; $("#bBack").disabled=!has||run.idx<0; $("#bNext").disabled=!has||run.idx>=run.steps.length-1; $("#bPlay").disabled=!has; $("#bReset").disabled=!has;
+  $("#ctr").textContent=has?`hop ${pad(Math.max(0,run.idx+1),2)} / ${run.steps.length}`:"— / —";
+  $("#runLabel").textContent=has?`${run.sub.submissionId} · ${run.sub.flow==="NB"?"New business":"Renewal"} · ${PRODUCTS[run.sub.product].name}`:"";
+  setNarr();
+}
+function setNarr(){
+  const n=$("#narr"); if(!run){return;}
+  if(run.idx<0){n.innerHTML=`<div class="num">00</div><div class="ttl">${esc(run.sub.insured.name)} is ready</div><div class="txt">${run.steps.length} hops queued for this ${run.sub.flow==="NB"?"new business":"renewal"} submission. Press Play to watch the whole flow, or Step to go one hop at a time and talk through each message.</div>`;return;}
+  const s=run.steps[run.idx], c=run.ctx;
+  const fill=t=>t.replace("{risk}",c.ids.risk||"").replace("{quote}",c.ids.quote||"");
+  n.innerHTML=`<div class="num">${pad(run.idx+1,2)}</div><div class="ttl">${esc(fill(s.title))}</div><div class="txt">${esc(fill(s.narr))}</div>`;
+}
+function renderMapState(){
+  if(!gFlights)return;
+  const s=run&&run.idx>=0?run.steps[run.idx]:null;
+  for(const n of NODES){const g=$("#n-"+n.id);g.classList.toggle("on",!!s&&(s.from===n.id||s.to===n.id));g.classList.toggle("sel",selected===n.id);
+    const r=g.querySelector("rect.box");r.style.stroke=s&&(s.from===n.id||s.to===n.id)?`var(${CH[s.ch].color})`:"";}
+  // badges
+  const setB=(id,v)=>{const b=$("#b-"+id);if(!b)return;b.setAttribute("visibility",v?"visible":"hidden");b.querySelector("text").textContent=v>999?"999+":v;};
+  for(const t of TOPICS) setB(t.id,world.topics[t.id].records.length);
+  setB("snow",world.snow.RISK_FORM_EVENTS.length+world.snow.POLICY_BOUND.length);setB("legacy",world.legacy.applications.length);setB("asb",world.sb.length);setB("rider",world.inbox.length);
+  // pg + es counters
+  const cnt={mt_events:world.mtEvents.length,mt_doc_flow_snapshot_projection:Object.keys(world.snapshots).length,mt_event_progression:null,inbox_state:world.inbox.length};
+  for(const k in cnt){const e=document.getElementById("pgc-"+k);if(e)e.textContent=k==="mt_event_progression"?`seq ${world.outboxPos}`:`${cnt[k]} rows`;}
+  $("#esCount").textContent=Object.keys(world.es).length;
+  // pg inner highlight
+  document.querySelectorAll("#n-pg .inner").forEach(g=>g.classList.remove("on"));
+  if(s&&s.to==="pg"){$("#pgt-mt_events").classList.add("on");if(run.details[run.idx]?.sql?.includes("snapshot"))$("#pgt-mt_doc_flow_snapshot_projection").classList.add("on");}
+  if(s&&s.from==="pg"&&s.to==="outbox")$("#pgt-mt_event_progression").classList.add("on");
+  if(s&&s.to==="rider"&&s.from==="t_enriched")$("#pgt-inbox_state").classList.add("on");
+  // LM chips
+  const c=run?.ctx;
+  $("#i2-parent").textContent=c?.ids.risk?`${c.ids.risk}  ·  v7  ·  ${c.status}`:"WF-RISK-····  ·  v7";
+  $("#i2-child").textContent=c?.ids.quote?`${c.ids.quote}  ·  v4  ·  parent ${c.ids.risk}`:"WF-QUOTE-····  ·  not spawned";
+  $("#i-child").classList.toggle("on",!!(s&&s.task&&s.task.some(t=>["t_rate","u_quote"].includes(t))));
+  $("#i-parent").classList.toggle("on",!!(s&&s.to==="lm"&&s.from==="asb"&&!s.task));
+  const doneTasks=new Set();if(run)run.steps.slice(0,run.idx).forEach(st=>(st.task||[]).forEach(t=>doneTasks.add(t)));
+  for(const t of LM_TASKS){const g=$("#i-"+t.id);g.classList.toggle("on",!!(s&&s.task&&s.task.includes(t.id)));g.classList.toggle("done",doneTasks.has(t.id)&&!(s&&s.task&&s.task.includes(t.id)));}
+  // broker leader hint
+  [0,1,2].forEach(b=>{$("#brk"+b).textContent=`leader for partitions ${b} and ${b+3} of every topic · AZ ${b+1}`;});
+  const d=run&&run.idx>=0?run.details[run.idx]:null; const rec=d&&d.kv&&d.kv.find(k=>k[0]==="Partition leader");
+  if(rec){const b=+rec[1].match(/broker-(\d)/)[1];const p=d.kv.find(k=>k[0]==="Partition")[1].split(" ")[0];$("#brk"+b).textContent=`▶ leader for ${d.kv.find(k=>k[0]==="Topic")[1]}[${p}] · writing offset ${d.kv.find(k=>k[0]==="Offset")[1]}`;}
+}
+function kvTable(rows){return `<table class="kv">${rows.map(([k,v])=>`<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join("")}</table>`;}
+function chanChip(ch){return `<span class="chan" style="background:var(${CH[ch].color})">${esc(CH[ch].label)}</span>`;}
+function renderInspector(){
+  const box=$("#insp");
+  if(selected){ const n=NODE[selected], inf=INFO[selected]||{};
+    $("#inspTitle").textContent=n.t; $("#inspSub").textContent="component";
+    let h=`<div class="fromto"><span class="chan" style="background:var(${n.k})">${esc(inf.tech||"")}</span></div><p style="margin:0">${esc(inf.what||"")}</p>${kvTable([["Hosting",inf.host||""],["Transcript",inf.ref||""]])}`;
+    if(inf.points?.length) h+=`<div class="note teach"><ul style="margin:0;padding-left:18px">${inf.points.map(p=>`<li>${esc(p)}</li>`).join("")}</ul></div>`;
+    if(inf.topic){const st=world.topics[inf.topic];h+=`<h3 class="sec">Partitions</h3><table class="kv">${st.next.map((o,p)=>`<tr><th>p${p} · broker-${p%3}</th><td>log-end offset ${o} · ${st.records.filter(r=>r.partition===p).length} in this session</td></tr>`).join("")}</table><h3 class="sec">Value schema (Avro)</h3><pre class="code">${jhtml(AVRO[inf.topic])}</pre>`;}
+    if(inf.backup) h+=`<button class="btn primary" id="bkBtn" type="button">Run backup job</button>${world.backups.length?kvTable(world.backups.map(b=>[b.ts,b.file])):""}`;
+    if(selected==="lm"&&run?.ctx?.ids.risk){const sn=world.snapshots[run.ctx.ids.risk];if(sn)h+=`<h3 class="sec">Flow snapshot</h3><pre class="code">${jhtml(sn)}</pre>`;}
+    h+=`<button class="btn" id="unsel" type="button">Back to the current hop</button>`;
+    box.innerHTML=h; $("#unsel").onclick=()=>{selected=null;renderAll();};
+    const bk=$("#bkBtn"); if(bk) bk.onclick=()=>{const ts=new Date().toISOString();world.backups.push({ts,file:`stcyberbackup/pg-dumps/cyber_api_db_${ts.slice(0,10).replace(/-/g,"")}.dump · immutable · 7y`});if(run)run.snap.backups=structuredClone(world.backups);fly({from:"pg",to:"aca",ch:"sql"});renderInspector();};
+    return;
+  }
+  if(!run||run.idx<0){$("#inspTitle").textContent="Inspector";$("#inspSub").textContent="current hop";box.innerHTML=`<div class="empty">${run?"Press Play or Step to send the first message.":"The message for the current hop shows here: protocol, producer, topic, partition, offset, headers, Avro schema and payload. Click a component on the map to see its details instead."}</div>`;return;}
+  const s=run.steps[run.idx], d=run.details[run.idx]||{};
+  $("#inspTitle").textContent=`Hop ${run.idx+1}`; $("#inspSub").textContent=CH[s.ch].label;
+  let h=`<div class="fromto">${chanChip(s.ch)} <b>${esc(NODE[s.from].t)}</b> → <b>${esc(NODE[s.to].t)}</b></div><div class="ref">Transcript: ${esc(s.ref||"")}</div>`;
+  if(d.kv) h+=kvTable(d.kv);
+  if(d.evalRows) h+=`<table class="kv eval">${d.evalRows.map(([k,v,ok,rule])=>`<tr><th>${esc(k)}</th><td>${esc(v)}<br><span class="${ok?"pass":"fail"}">${ok?"PASS":"FAIL"}</span> <span style="color:var(--muted)">· ${esc(rule)}</span></td></tr>`).join("")}</table>`;
+  if(d.rating){const r=d.rating;h+=`<h3 class="sec">Rating worksheet</h3><table class="kv">${r.lines.map(([a,b,c])=>`<tr><th>${esc(a)}</th><td>${esc(b)} → <b>${typeof c==="number"&&c>50?usd(c):c}</b></td></tr>`).join("")}<tr><th>Annual premium</th><td><b>${usd(r.premium)}</b></td></tr><tr><th>Policy fee</th><td>${usd(r.fee)}</td></tr>${r.expiringPremium?`<tr><th>Expiring premium</th><td>${usd(r.expiringPremium)} · rate change ${r.rateChange>0?"+":""}${r.rateChange}%</td></tr>`:""}</table>`;}
+  if(d.note||s.note) h+=`<div class="note">${esc(d.note||s.note)}</div>`;
+  if(d.sql) h+=`<h3 class="sec">SQL</h3><pre class="code">${esc(d.sql)}</pre>`;
+  if(d.headers) h+=`<h3 class="sec">Record headers</h3><pre class="code">${jhtml(d.headers)}</pre>`;
+  if(d.events) h+=`<h3 class="sec">Events written</h3><pre class="code">${jhtml(d.events)}</pre>`;
+  if(d.payload) h+=`<h3 class="sec">${s.ch==="kafka"?"Record value (Avro, shown as JSON)":"Payload"}</h3><pre class="code">${jhtml(d.payload)}</pre>`;
+  if(d.schema) h+=`<details${s.ch==="avro"?" open":""}><summary>Avro schema · ${esc(d.schema.namespace+"."+d.schema.name)}</summary><pre class="code" style="margin-top:6px">${jhtml(d.schema)}</pre></details>`;
+  box.innerHTML=h;
+}
+const TABS=[["timeline","Hop timeline"],["kafka","Kafka topics"],["groups","Consumer groups"],["marten","Event store"],["bpmn","BPMN workflows"],["sb","Service Bus"],["es","Elasticsearch"],["snow","Snowflake"],["legacy","Legacy DB"]];
+function renderDrawer(){
+  const counts={timeline:run?run.steps.length:0,kafka:Object.values(world.topics).reduce((a,t)=>a+t.records.length,0),groups:Object.keys(world.groups).length,marten:world.mtEvents.length,bpmn:"",sb:world.sb.length,es:Object.keys(world.es).length,snow:world.snow.RISK_FORM_EVENTS.length+world.snow.POLICY_BOUND.length,legacy:world.legacy.applications.length+world.legacy.policies.length};
+  $("#tabs").innerHTML=TABS.map(([id,l])=>`<button role="tab" type="button" data-tab="${id}" aria-selected="${tab===id}">${l}<span class="cnt">${counts[id]===""?"":counts[id]}</span></button>`).join("");
+  document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;renderDrawer();});
+  const B=$("#dbody");
+  const tbl=(cols,rows,opts={})=>rows.length?`<table class="grid"><thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${rows.map((r,i)=>`<tr class="${opts.cls?opts.cls(i):""}" ${opts.attr?opts.attr(i):""}>${r.map(v=>`<td title="${esc(v)}">${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table>`:`<div class="empty">${opts.empty||"Nothing here yet."}</div>`;
+  if(tab==="timeline"){
+    if(!run){B.innerHTML=`<div class="empty">Create a submission to see its hops.</div>`;return;}
+    B.innerHTML=tbl(["#","Channel","From","To","What happens","Transcript"],run.steps.map((s,i)=>[pad(i+1,2),CH[s.ch].label+(s.dup>1?` ×${s.dup}`:""),NODE[s.from].t,NODE[s.to].t,s.title.replace("{risk}",run.ctx.ids.risk||"").replace("{quote}",run.ctx.ids.quote||""),s.ref||""]),
+      {cls:i=>"click "+(i===run.idx?"cur":i>run.idx?"future":""),attr:i=>`data-i="${i}"`});
+    B.querySelectorAll("tr[data-i]").forEach(tr=>tr.onclick=()=>jumpTo(+tr.dataset.i));
+    const cur=B.querySelector("tr.cur");if(cur)cur.scrollIntoView({block:"nearest"});
+  } else if(tab==="kafka"){
+    const rows=TOPICS.flatMap(t=>world.topics[t.id].records).sort((a,b)=>a.ts<b.ts?1:-1);
+    B.innerHTML=tbl(["Topic","Partition","Offset","Leader","Key","Producer","Schema id","Timestamp","Value"],rows.map(r=>[r.topic,r.partition,r.offset,r.leader,r.key,r.producer,r.schemaId,r.ts,JSON.stringify(r.value)]),{empty:"No records produced yet. Start a run."});
+  } else if(tab==="groups"){
+    const rows=[];for(const g in world.groups)for(const k in world.groups[g])rows.push([g,k,world.groups[g][k],0]);
+    B.innerHTML=tbl(["Consumer group","Topic [partition]","Committed offset","Lag"],rows,{empty:"No consumer has committed an offset yet."});
+  } else if(tab==="marten"){
+    const ev=[...world.mtEvents].reverse();
+    B.innerHTML=`<h3 class="sec" style="margin-bottom:6px">cyber.mt_events</h3>`+tbl(["seq_id","stream_id","version","type","timestamp","data"],ev.map(e=>[e.seq_id,e.stream_id,e.version,e.type,e.timestamp,JSON.stringify(e.data)]),{empty:"No events yet."})+
+      `<h3 class="sec" style="margin:14px 0 6px">cyber.mt_doc_flow_snapshot_projection</h3>`+tbl(["id","mt_last_modified","data"],Object.values(world.snapshots).map(s=>[s.id,s.mt_last_modified,JSON.stringify(s.data)]),{empty:"No snapshots yet."});
+  } else if(tab==="bpmn"){ B.innerHTML=bpmnHtml(); }
+  else if(tab==="sb"){B.innerHTML=tbl(["Sent","Entity","Session ID","Message type","Message ID","State"],[...world.sb].reverse().map(m=>[m.ts,m.entity,m.sessionId,m.type,m.messageId,m.state]),{empty:"No commands sent yet."});}
+  else if(tab==="es"){B.innerHTML=tbl(["_id","status","insuredName","state","product","classOfBusiness","isRenewal","premium","policyNumber"],Object.values(world.es).map(d=>[d.riskId,d.status,d.insuredName,d.state,d.product,d.classOfBusiness,d.isRenewal,d.premium??"",d.policyNumber??""]),{empty:"Index risk-dashboard is empty."});}
+  else if(tab==="snow"){B.innerHTML=`<h3 class="sec" style="margin-bottom:6px">CYBER_DW.RAW.RISK_FORM_EVENTS</h3>`+tbl(["topic","partition","offset","key","RECORD_CONTENT"],world.snow.RISK_FORM_EVENTS.map(r=>[r.RECORD_METADATA.topic,r.RECORD_METADATA.partition,r.RECORD_METADATA.offset,r.RECORD_METADATA.key,JSON.stringify(r.RECORD_CONTENT)]))+
+      `<h3 class="sec" style="margin:14px 0 6px">CYBER_DW.RAW.POLICY_BOUND</h3>`+tbl(["topic","partition","offset","key","RECORD_CONTENT"],world.snow.POLICY_BOUND.map(r=>[r.RECORD_METADATA.topic,r.RECORD_METADATA.partition,r.RECORD_METADATA.offset,r.RECORD_METADATA.key,JSON.stringify(r.RECORD_CONTENT)]));}
+  else if(tab==="legacy"){B.innerHTML=`<h3 class="sec" style="margin-bottom:6px">dbo.APPLICATION</h3>`+tbl(["APPLICATION_ID","SUBMISSION_REF","FEIN","INSURED_NAME","COMPANY_CODE","PRODUCT_NAME","PROCESS_STATUS","PRIOR_POLICY_NUMBER"],world.legacy.applications.map(a=>[a.APPLICATION_ID,a.SUBMISSION_REF,a.FEIN,a.INSURED_NAME,a.COMPANY_CODE,a.PRODUCT_NAME,a.PROCESS_STATUS,a.PRIOR_POLICY_NUMBER??"NULL"]))+
+      `<h3 class="sec" style="margin:14px 0 6px">dbo.POLICY (expiring)</h3>`+tbl(["POLICY_NUMBER","FEIN","INSURED_NAME","PRODUCT","EFFECTIVE","EXPIRATION","LIMIT","ANNUAL_PREMIUM","OPTION_IDS"],world.legacy.policies.map(p=>[p.POLICY_NUMBER,p.FEIN,p.INSURED_NAME,p.PRODUCT,p.EFFECTIVE_DATE,p.EXPIRATION_DATE,usd(p.LIMIT),usd(p.ANNUAL_PREMIUM),p.OPTION_IDS]),{empty:"Renewal submissions add their expiring policy here."});}
+}
+function bpmnHtml(){
+  const c=run?.ctx, nb=!run||run.sub.flow==="NB";
+  const st=id=>c?(c.bpmn.cur===id?"cur":c.bpmn.done.includes(id)?"done":""):"";
+  const n=(id,t,sm,cls)=>`<div class="bn ${cls||""} ${st(id)}"><span>${esc(t)}</span>${sm?`<small>${esc(sm)}</small>`:""}</div>`;
+  const a=`<div class="arrow" aria-hidden="true"></div>`;
+  const parent=[n("p_start","Start","SubmissionEnriched","ev"),n("p_clear","ClearanceCheck","system task"),n("p_app","AppetiteValidation","system task"),n("p_score","ScoringAlgorithm","system task"),n("p_risk","Complete Risk Details","user task · form","user"),n("p_spawn","Spawn quote","call activity → child"),n("p_bindreq","Request Bind","user task","user"),n("p_bind","BindPolicy","system task"),n("p_end","End","PolicyBound","ev")].join(a);
+  const child=[n("c_start","Start","from parent","ev"),n("c_rate","RatingEngine","system task"),n("c_review","Review & Issue Quote","user task","user"),n("c_issued","Quote issued","IHandleChangeMadeToChild"),n("c_end","End","bound","ev")].join(a);
+  return `<div class="bpmn"><div class="lane"><h3>Parent · ${esc(c?.ids.risk||"WF-RISK-…")}<br><small class="mono" style="font-weight:400">${nb?"cyber-risk-clearance":"cyber-risk-renewal"}.bpmn v7</small></h3>${parent}</div>
+  <div class="lane"><h3>Child · ${esc(c?.ids.quote||"WF-QUOTE-…")}<br><small class="mono" style="font-weight:400">${esc(run?PRODUCTS[run.sub.product].bpmnQuote:"cyber-quote-*.bpmn")} v4</small></h3>${child}</div>
+  <p class="ref" style="margin:0">Dashed boxes are user tasks (composite forms in the workbench). Solid boxes are system tasks: C# classes named in the diagram, each implementing IHandleServiceTask.Execute(). Green = completed, blue = current.${!nb?" Renewals first upgrade last year's v6 instance to v7 (UpgradeFlowVersion).":""}</p></div>`;
+}
+function renderQueue(){
+  const q=$("#queue"); if(!subs.length)return;
+  q.innerHTML=subs.map((s,i)=>`<button type="button" class="qitem" data-i="${i}" aria-current="${run&&run.sub===s}"><span class="l1"><span>${esc(s.insured.name)}</span><span class="chip ${s.status==="BOUND"?"ok":s.status==="IGNORED"?"no":""}">${esc(s.status||"NEW")}</span></span><span class="l2">${esc(s.submissionId)} · ${s.flow==="NB"?"NB":"RN"} · ${esc(PRODUCTS[s.product].name)} · ${esc(s.insured.address.state)} · ${usdM(s.insured.revenue)}</span></button>`).join("");
+  q.querySelectorAll(".qitem").forEach(b=>b.onclick=()=>{const s=subs[+b.dataset.i];if(run&&run.sub===s)return;startRun(s);});
+}
+function renderCard(){
+  const card=$("#subCard"); if(!run){card.hidden=true;return;} card.hidden=false;
+  const s=run.sub,c=run.ctx,P=PRODUCTS[s.product];
+  const f=[["Submission",s.submissionId],["Application ID",c.ids.app||"pending"],["Risk workflow",c.ids.risk||"pending"],["Quote workflow",c.ids.quote||"pending"],["Quote #",c.ids.quoteNo||"pending"],["Policy #",c.ids.policy||"pending"],
+    ["Insured",s.insured.name],["State",s.insured.address.state],["NAICS",`${s.insured.naics} ${s.insured.naicsTitle}`],["Revenue / segment",`${usdM(s.insured.revenue)} · ${s.insured.revenue>MM_THRESHOLD?"Middle Market":"Small Commercial"}`],["Product",`${P.name} (${P.companyCode})`],["Class of business",`${P.cob.code}`],
+    ["Broker",s.broker.firm],["Limit / retention",`${usdM(s.limit)} / ${usd(s.retention)}`],["Status",c.status]];
+  if(s.flow==="RN") f.push(["Expiring policy",s.expiring.policyNumber]);
+  if(c.rt) f.push(["Premium",usd(c.rt.premium)+(c.rt.rateChange!=null?` (${c.rt.rateChange>0?"+":""}${c.rt.rateChange}%)`:"")]);
+  card.innerHTML=f.map(([k,v])=>`<div><small>${esc(k)}</small><span title="${esc(v)}">${esc(v)}</span></div>`).join("");
+}
+function selectNode(id){selected=selected===id?null:id;renderMapState();renderInspector();}
+
+/* ============================================================ form wiring */
+function fillSelect(id,opts){$(id).innerHTML=opts.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join("");}
+function setFlow(f){$("#flowNB").setAttribute("aria-pressed",f==="NB");$("#flowRN").setAttribute("aria-pressed",f==="RN");$("#renewalBox").hidden=f!=="RN";updateDerived();}
+function setLimits(){const P=PRODUCTS[$("#product").value];const cur=+$("#limit").value;fillSelect("#limit",P.limits.map(l=>[l,usdM(l)]));$("#limit").value=P.limits.includes(cur)?cur:P.limits.at(-1);}
+function updateDerived(){
+  const n=naicsOf($("#naics").value);$("#sic").value=n[2];$("#hazard").value=n[3];
+  const b=brokerOf($("#broker").value);$("#prodCode").value=b.producerCode;$("#npn").value=b.npn;$("#bContact").value=b.contact;$("#bLic").value=b.licenseState;$("#bEmail").value=b.email;
+  const P=PRODUCTS[$("#product").value], rev=+$("#revenue").value||0, mm=rev>MM_THRESHOLD, rn=$("#flowRN").getAttribute("aria-pressed")==="true";
+  $("#derived").innerHTML=`<span class="chip ${mm?"ok":"no"}"><b>${mm?"Middle Market":"Small Commercial"}</b> ${mm?"> $50M":"≤ $50M · will be filtered out"}</span><span class="chip">Company code <b>${P.companyCode}</b></span><span class="chip">Filter product <b>${esc(P.filterProductName)}</b></span><span class="chip">Class <b>${P.cob.code}</b></span><span class="chip">${rn?"Clearance of Renewal":"Clearance of New Business"}</span>`;
+  $("#derived").title=P.cob.desc;
+  if(!$("#eff").value){const d=new Date();d.setUTCDate(d.getUTCDate()+30);$("#eff").value=d.toISOString().slice(0,10);}
+}
+function loadSample(i){
+  const s=SAMPLES[i];$("#insName").value=s.name;$("#fein").value=s.fein;$("#domain").value=s.domain;$("#street").value=s.street;$("#city").value=s.city;$("#state").value=s.state;$("#zip").value=s.zip;$("#yib").value=s.yib;$("#naics").value=s.naics;$("#revenue").value=s.revenue;$("#emps").value=s.emps;$("#records").value=s.records;$("#broker").value=s.broker;$("#product").value=s.product;setLimits();$("#limit").value=s.limit;$("#retention").value=s.ret;
+  const h=fnv(s.fein);$("#expPol").value=`CYB-MM-2025-${pad(5000+h%2000,6)}`;$("#expPrem").value=Math.round((20000+h%90000)/100)*100;$("#expLimit").value=s.limit;$("#expOpts").value=`OPT-${71000+h%900}, OPT-${71000+h%900+1}`;
+  updateDerived();
+}
+function randomize(){
+  const r=a=>a[Math.floor(Math.random()*a.length)];
+  const names=["Harbor","Meridian","Keystone","Lakeshore","Ironwood","Bluefield","Crescent","Pinnacle","Redstone","Westbrook"],kinds=[["Health System","622110"],["Savings Bank","522110"],["Data Centers LLC","518210"],["Manufacturing Co.","336411"],["University","611310"],["Power Cooperative","221122"],["Software, Inc.","541511"],["Logistics Corp.","488510"]];
+  const k=r(kinds),nm=`${r(names)} ${k[0]}`,st=r(STATES)[0];
+  $("#insName").value=nm;$("#naics").value=k[1];$("#state").value=st;$("#fein").value=`${pad(10+Math.floor(Math.random()*89),2)}-${pad(Math.floor(Math.random()*9999999),7)}`;
+  $("#domain").value=nm.toLowerCase().replace(/[^a-z]+/g,"")+".example";$("#street").value=`${100+Math.floor(Math.random()*8900)} Commerce Way`;$("#city").value="Springfield";$("#zip").value=pad(Math.floor(Math.random()*99999),5);
+  $("#revenue").value=(55+Math.floor(Math.random()*900))*1e6;$("#emps").value=200+Math.floor(Math.random()*5000);$("#records").value=(10+Math.floor(Math.random()*900))*1000;$("#yib").value=5+Math.floor(Math.random()*80);
+  $("#broker").value=r(BROKERS).id;updateDerived();
+}
+function init(){
+  fillSelect("#sample",SAMPLES.map((s,i)=>[i,s.label]));
+  fillSelect("#product",Object.values(PRODUCTS).map(p=>[p.code,`${p.name} · company ${p.companyCode} · ${p.cob.code}`]));
+  fillSelect("#retention",Object.keys(RET).map(r=>[r,usd(+r)]));
+  fillSelect("#expLimit",[1e6,2e6,3e6,5e6,10e6].map(l=>[l,usdM(l)]));
+  fillSelect("#state",STATES.map(([c,n])=>[c,`${c} · ${n}`]));
+  fillSelect("#naics",NAICS.map(n=>[n[0],`${n[0]} · ${n[1]}`]));
+  fillSelect("#broker",BROKERS.map(b=>[b.id,`${b.firm} · ${b.city}`]));
+  $("#legend").innerHTML=Object.entries(CH).filter(([k])=>k!=="avro").map(([k,v])=>`<span><i style="background:var(${v.color})"></i>${esc(v.label)}</span>`).join("");
+  setLimits(); loadSample(0); setFlow("NB");
+  $("#sample").onchange=e=>loadSample(+e.target.value);
+  $("#flowNB").onclick=()=>setFlow("NB");$("#flowRN").onclick=()=>setFlow("RN");
+  $("#product").onchange=()=>{setLimits();updateDerived();};
+  ["#naics","#broker","#revenue"].forEach(id=>$(id).addEventListener("input",updateDerived));
+  $("#randBtn").onclick=randomize;
+  $("#subForm").addEventListener("submit",e=>{e.preventDefault();const s=readForm();s.submissionId=`SUB-2026-${pad(subSeq++,6)}`;s.createdAt=new Date().toISOString();s.status=eligibility(s).ok?"NEW":"IGNORED";subs.unshift(s);startRun(s);});
+  $("#bNext").onclick=()=>{stopPlay();stepForward(true);};
+  $("#bBack").onclick=()=>{if(run)jumpTo(run.idx-1);};
+  $("#bReset").onclick=()=>jumpTo(-1);
+  $("#bPlay").onclick=()=>playing?stopPlay():play();
+  $("#speed").oninput=e=>{speed=+e.target.value;$("#speedV").textContent=speed+"×";};
+  const themes=["system","light","dark"];let ti=0;try{ti=Math.max(0,themes.indexOf(localStorage.getItem("lab-theme")||"system"));}catch(e){}
+  const applyTheme=()=>{const t=themes[ti];if(t==="system")document.documentElement.removeAttribute("data-theme");else document.documentElement.setAttribute("data-theme",t);$("#themeBtn").textContent="Theme: "+t;try{localStorage.setItem("lab-theme",t);}catch(e){}};
+  $("#themeBtn").onclick=()=>{ti=(ti+1)%3;applyTheme();};applyTheme();
+  document.addEventListener("keydown",e=>{if(e.target.closest("input,select,textarea"))return;if(e.key==="ArrowRight"){stopPlay();stepForward(true);}else if(e.key==="ArrowLeft"&&run){jumpTo(run.idx-1);}else if(e.key===" "&&run&&!e.target.closest("button,.node")){e.preventDefault();playing?stopPlay():play();}});
+  drawMap(); renderAll();
+}
+init();
+</script>
