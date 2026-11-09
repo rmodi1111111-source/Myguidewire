@@ -1,0 +1,829 @@
+<title>Workbench Event Store Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: three working columns. Left = the underwriter workbench (every field type). Centre = the event pipeline each edit travels through. Right = what gets stored (event stream, projections, Kafka/Snowflake, reference data, time travel). Built for 1920–2560px; stacks on narrow screens. */
+:root{
+  --bg:#e8ecf1; --panel:#ffffff; --panel-2:#f3f5f8; --sunk:#edf0f4;
+  --ink:#122033; --muted:#526174; --faint:#8794a5; --line:#cdd5df; --grid:#e1e6ec;
+  --accent:#1f4fbf; --accent-ink:#ffffff; --accent-soft:rgba(31,79,191,.10);
+  --c-kafka:#c2410c; --c-sb:#0369a1; --c-http:#0f766e; --c-pg:#4338ca; --c-es:#a16207;
+  --c-sr:#be185d; --c-snow:#0e7490; --c-logic:#475569; --c-blob:#7c3aed; --c-ui:#334155;
+  --good:#15803d; --warn:#b45309; --bad:#b91c1c;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0b121b; --panel:#111b27; --panel-2:#16222f; --sunk:#0e1722;
+  --ink:#e3eaf2; --muted:#9aaabb; --faint:#6a7b8f; --line:#28384c; --grid:#1b2837;
+  --accent:#7aa2ff; --accent-ink:#0b121b; --accent-soft:rgba(122,162,255,.15);
+  --c-kafka:#fb923c; --c-sb:#38bdf8; --c-http:#2dd4bf; --c-pg:#a5b4fc; --c-es:#facc15;
+  --c-sr:#f472b6; --c-snow:#67e8f9; --c-logic:#a3b1c2; --c-blob:#c4b5fd; --c-ui:#cbd5e1;
+  --good:#4ade80; --warn:#fbbf24; --bad:#f87171; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0b121b; --panel:#111b27; --panel-2:#16222f; --sunk:#0e1722;
+  --ink:#e3eaf2; --muted:#9aaabb; --faint:#6a7b8f; --line:#28384c; --grid:#1b2837;
+  --accent:#7aa2ff; --accent-ink:#0b121b; --accent-soft:rgba(122,162,255,.15);
+  --c-kafka:#fb923c; --c-sb:#38bdf8; --c-http:#2dd4bf; --c-pg:#a5b4fc; --c-es:#facc15;
+  --c-sr:#f472b6; --c-snow:#67e8f9; --c-logic:#a3b1c2; --c-blob:#c4b5fd; --c-ui:#cbd5e1;
+  --good:#4ade80; --warn:#fbbf24; --bad:#f87171; color-scheme:dark }
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px;box-sizing:border-box}
+*,*::before,*::after{box-sizing:border-box}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3,h4{font-family:var(--f-display);margin:0;text-wrap:balance}
+.mono{font-family:var(--f-mono)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.shell{display:flex;flex-direction:column;gap:12px}
+header.top{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.brand h1{font-size:27px;font-weight:700;line-height:1.1}
+.brand p{margin:2px 0 0;font-size:13px;color:var(--muted)}
+.spacer{flex:1}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 13px;cursor:pointer;font-weight:500;font-size:13.5px;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.btn.sm{padding:4px 9px;font-size:12.5px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;min-width:0;min-height:0}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.ph h2{font-size:15px;letter-spacing:.06em;text-transform:uppercase}
+.ph .sub{font-size:12px;color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;border:1px solid var(--line);border-radius:999px;padding:1px 9px;background:var(--panel-2);white-space:nowrap}
+.chip.ok{border-color:color-mix(in srgb,var(--good) 45%,transparent);color:var(--good)}
+.chip.no{border-color:color-mix(in srgb,var(--bad) 45%,transparent);color:var(--bad)}
+.chip.warn{border-color:color-mix(in srgb,var(--warn) 45%,transparent);color:var(--warn)}
+.sec{font-family:var(--f-display);font-size:12.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:0}
+pre.code{margin:0;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-family:var(--f-mono);font-size:11.5px;line-height:1.5;overflow:auto;max-height:340px;white-space:pre}
+.jk{color:var(--c-pg)} .js{color:var(--c-http)} .jn{color:var(--c-kafka)} .jl{color:var(--c-sr)}
+.note{border-left:3px solid var(--accent);background:var(--accent-soft);padding:8px 11px;border-radius:0 8px 8px 0;font-size:13.5px}
+.note.warn{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 9%,transparent)}
+.note.bad{border-left-color:var(--bad);background:color-mix(in srgb,var(--bad) 8%,transparent)}
+.layout{display:grid;gap:12px;grid-template-columns:minmax(0,1.2fr) 470px minmax(0,1fr);align-items:start}
+
+/* --- narrator bar --- */
+.narrator{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px 16px}
+.narrator .live{width:10px;height:10px;border-radius:50%;background:var(--faint)}
+.narrator .live.on{background:var(--bad);animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.25}}
+.narrator p{margin:0;font-size:16.5px;line-height:1.5}
+.narrator .ctl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.narrator label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.narrator select{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px;max-width:180px}
+
+/* --- workbench --- */
+.wb-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;background:var(--panel-2);border-radius:12px 12px 0 0}
+.wb-head h2{font-size:21px;font-weight:600}
+.wb-head .ids{display:flex;flex-wrap:wrap;gap:6px}
+.tt-banner{margin:10px 14px 0}
+.form{padding:12px 14px 16px;display:flex;flex-direction:column;gap:12px}
+.card{border:1px solid var(--line);border-radius:10px;padding:10px 12px 12px}
+.card > h3{font-size:14.5px;font-weight:600;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.card > h3 small{font-family:var(--f-mono);font-weight:400;font-size:11px;color:var(--faint)}
+.fgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.fld{display:flex;flex-direction:column;gap:3px;min-width:0;position:relative}
+.fld.full{grid-column:1/-1}
+.fld .lab{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+.fld .lab .req{color:var(--bad)}
+.ftype{font-family:var(--f-mono);font-size:10px;letter-spacing:.02em;border-radius:4px;padding:0 5px;background:var(--sunk);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.ftype.ref{color:var(--c-sb);border-color:color-mix(in srgb,var(--c-sb) 40%,var(--line))}
+.ftype.der{color:var(--c-logic)}
+.ftype.up{color:var(--c-blob);border-color:color-mix(in srgb,var(--c-blob) 40%,var(--line))}
+.hidetypes .ftype{display:none}
+.fld input,.fld select,.fld textarea{background:var(--panel-2);border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:14px;color:var(--ink);width:100%;min-width:0}
+.fld textarea{min-height:58px;resize:vertical}
+.fld input[readonly],.fld .ro{background:var(--sunk);color:var(--muted);border-style:dashed}
+.fld .ro{border:1px dashed var(--line);border-radius:7px;padding:6px 8px;font-size:14px;min-height:33px}
+.fld.pending input,.fld.pending select,.fld.pending textarea,.fld.pending .box{border-color:var(--warn)}
+.fld.saved input,.fld.saved select,.fld.saved textarea,.fld.saved .box{border-color:color-mix(in srgb,var(--good) 60%,var(--line))}
+.fld.error input,.fld.error select,.fld.error textarea,.fld.error .box{border-color:var(--bad);box-shadow:0 0 0 2px color-mix(in srgb,var(--bad) 18%,transparent)}
+.fstat{font-family:var(--f-mono);font-size:10.5px;min-height:14px;color:var(--faint)}
+.fld.pending .fstat{color:var(--warn)} .fld.saved .fstat{color:var(--good)} .fld.error .fstat{color:var(--bad)}
+.fld.flash{animation:flash 1.4s ease-out}
+@keyframes flash{0%{background:color-mix(in srgb,var(--accent) 22%,transparent);border-radius:8px}100%{background:transparent}}
+.money{display:grid;grid-template-columns:110px minmax(0,1fr);gap:6px}
+.radios,.checks{display:flex;flex-wrap:wrap;gap:6px 14px;padding:4px 0}
+.radios label,.checks label{display:flex;gap:6px;align-items:center;font-size:13.5px;color:var(--ink)}
+.checks label{border:1px solid var(--line);border-radius:999px;padding:3px 10px;background:var(--panel-2)}
+.checks input,.radios input{width:auto}
+.switch{display:flex;align-items:center;gap:10px;font-size:13.5px}
+.switch input{width:auto;transform:scale(1.25)}
+.gridtbl{width:100%;border-collapse:collapse;font-size:13px}
+.gridtbl th{text-align:left;font-weight:500;color:var(--muted);font-size:12px;border-bottom:1px solid var(--line);padding:4px 8px 4px 0}
+.gridtbl td{border-bottom:1px solid var(--grid);padding:5px 8px 5px 0;vertical-align:middle}
+.gridtbl input,.gridtbl select{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:13px;width:100%}
+.drop{border:1.5px dashed color-mix(in srgb,var(--c-blob) 50%,var(--line));border-radius:10px;padding:12px;text-align:center;color:var(--muted);font-size:13px;cursor:pointer;background:color-mix(in srgb,var(--c-blob) 4%,var(--panel))}
+.drop.over{background:color-mix(in srgb,var(--c-blob) 12%,var(--panel))}
+.notes{display:flex;flex-direction:column;gap:6px;max-height:160px;overflow:auto}
+.notes div{font-size:13px;border-left:3px solid var(--line);padding:2px 8px}
+.notes small{color:var(--muted);font-family:var(--f-mono);font-size:11px}
+.retired{color:var(--warn);font-size:11.5px}
+
+/* --- pipeline --- */
+.pipe{padding:12px 14px;position:relative}
+.stages{display:flex;flex-direction:column;gap:0;position:relative}
+.stg{display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;align-items:start;padding:6px 0;position:relative;opacity:.4;transition:opacity .25s}
+.stg::after{content:"";position:absolute;left:21px;top:42px;bottom:-6px;width:2px;background:var(--line)}
+.stg:last-child::after{display:none}
+.stg.part{opacity:.85}
+.stg.on{opacity:1}
+.stg.done{opacity:1}
+.stg .ic{width:44px;height:36px;border-radius:9px;border:2px solid var(--k);display:grid;place-items:center;font-family:var(--f-mono);font-size:10.5px;font-weight:600;color:var(--k);background:var(--panel);z-index:1;transition:background .2s,color .2s}
+.stg.on .ic{background:var(--k);color:#fff;box-shadow:0 0 0 5px color-mix(in srgb,var(--k) 22%,transparent)}
+.stg.done .ic{background:color-mix(in srgb,var(--k) 16%,var(--panel))}
+.stg.fail .ic{border-color:var(--bad);background:var(--bad);color:#fff}
+.stg b{font-size:13.5px}
+.stg small{display:block;font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+.stg .sd{font-family:var(--f-mono);font-size:11.5px;margin-top:2px;color:var(--ink);word-break:break-word}
+.stg.fail .sd{color:var(--bad)}
+.queue{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
+.queue span{font-family:var(--f-mono);font-size:10px;border:1px solid var(--c-sb);border-radius:4px;padding:0 4px;color:var(--c-sb)}
+.explain ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px;font-size:13px}
+.explain li.fail{color:var(--bad)}
+.log{max-height:220px;overflow:auto}
+.log table{width:100%;border-collapse:collapse;font-size:12px}
+.log td{border-bottom:1px solid var(--grid);padding:4px 6px 4px 0;font-family:var(--f-mono);font-size:11.5px;vertical-align:top}
+
+/* --- right tabs --- */
+.tabs{display:flex;gap:2px;padding:0 10px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs button{border:0;background:none;padding:10px 11px;cursor:pointer;font-size:13.5px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs .cnt{font-family:var(--f-mono);font-size:11px;color:var(--faint);margin-left:4px}
+.tbody{padding:12px 14px;display:flex;flex-direction:column;gap:12px}
+.dt{border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:tabular-nums}
+.dt th{text-align:left;font-weight:600;color:var(--muted);font-size:11.5px;padding:5px 10px 5px 0;border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:0;background:var(--panel)}
+.dt td{padding:5px 10px 5px 0;border-bottom:1px solid var(--grid);font-family:var(--f-mono);font-size:11.5px;vertical-align:top}
+.dt td.clip{max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dt tr.new td{background:color-mix(in srgb,var(--c-pg) 12%,transparent)}
+.dt tr.click{cursor:pointer}
+.dt tr.click:hover td{background:var(--panel-2)}
+.dt tr.sel td{background:var(--accent-soft)}
+.tw{overflow:auto;max-height:430px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--panel-2);padding:5px 10px;cursor:pointer;font-size:12.5px}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.admin{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:end}
+.admin label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+.admin input,.admin select{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:5px 7px;font-size:13px}
+.diff{display:flex;flex-direction:column;gap:4px;font-size:12.5px}
+.diff div{display:grid;grid-template-columns:150px minmax(0,1fr) minmax(0,1fr);gap:8px;border-bottom:1px solid var(--grid);padding:3px 0;font-family:var(--f-mono);font-size:11.5px}
+.diff .a{color:var(--bad)} .diff .b{color:var(--good)}
+input[type=range]{width:100%}
+@media (max-width:1700px){ .layout{grid-template-columns:minmax(0,1.1fr) 420px minmax(0,1fr)} }
+@media (max-width:1300px){ .layout{grid-template-columns:minmax(0,1fr) minmax(0,1fr)} .rightcol{grid-column:1/-1} }
+@media (max-width:860px){ .layout{grid-template-columns:minmax(0,1fr)} .fgrid{grid-template-columns:minmax(0,1fr)} .narrator{grid-template-columns:minmax(0,1fr)} .admin{grid-template-columns:1fr 1fr} }
+@media (prefers-reduced-motion: reduce){ *{transition:none!important;animation:none!important} }
+</style>
+
+<div class="shell">
+  <header class="top">
+    <div class="brand"><h1>Workbench Event Store Lab</h1><p>How every field on the cyber workbench becomes an event, a projection and a downstream message · same architecture as the Cyber Clearance Event Lab</p></div>
+    <span class="spacer"></span>
+    <button class="btn" id="typesBtn" type="button" aria-pressed="true">Field types: shown</button>
+    <button class="btn" id="resetBtn" type="button">Reset lab</button>
+    <button class="btn" id="themeBtn" type="button">Theme: system</button>
+  </header>
+
+  <section class="panel narrator" aria-label="Narrator">
+    <span class="live" id="live"></span>
+    <p id="narr">Edit any field on the workbench and watch it travel through the architecture. Or press <b>Play guided demo</b> for a narrated walkthrough of every field type, reference data changes, a late validation error, a concurrent edit and time travel.</p>
+    <div class="ctl">
+      <button class="btn primary" id="demoBtn" type="button">▶ Play guided demo</button>
+      <button class="btn on" id="voiceBtn" type="button" aria-pressed="true">🔊 Voice on</button>
+      <label>Voice <select id="voiceSel"><option value="">Default</option></select></label>
+      <label>Pace <select id="paceSel"><option value="1.6">Slow</option><option value="1" selected>Normal</option><option value="0.5">Fast</option></select></label>
+    </div>
+  </section>
+
+  <div class="layout">
+    <!-- ================= WORKBENCH ================= -->
+    <section class="panel" aria-label="Cyber workbench">
+      <div class="wb-head" id="wbHead"></div>
+      <div id="ttBanner"></div>
+      <div class="form" id="form"></div>
+    </section>
+
+    <!-- ================= PIPELINE ================= -->
+    <section class="panel" aria-label="Event pipeline">
+      <div class="ph"><h2>Event pipeline</h2><span class="sub" id="pipeSub">idle</span></div>
+      <div class="pipe"><div class="stages" id="stages"></div></div>
+      <div style="padding:0 14px 12px;display:flex;flex-direction:column;gap:10px">
+        <div class="explain"><h3 class="sec" style="margin-bottom:6px">What just happened</h3><ol id="explain"><li>Nothing yet. Change a field on the left.</li></ol></div>
+        <details open><summary class="sec" style="cursor:pointer">Command sent</summary><pre class="code" id="cmdJson" style="margin-top:6px">—</pre></details>
+        <details open><summary class="sec" style="cursor:pointer">Event(s) appended</summary><pre class="code" id="evJson" style="margin-top:6px">—</pre></details>
+        <div><h3 class="sec" style="margin-bottom:6px">Command log</h3><div class="log"><table id="logTbl"></table></div></div>
+      </div>
+    </section>
+
+    <!-- ================= STORES ================= -->
+    <section class="panel rightcol" aria-label="What is stored">
+      <div class="tabs" role="tablist" id="tabs"></div>
+      <div class="tbody" id="tbody"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ================================================================ helpers */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fnv=s=>{let h=0x811c9dc5;for(const ch of String(s)){h^=ch.charCodeAt(0);h=Math.imul(h,0x01000193)>>>0}return h>>>0};
+const uuid=seed=>{const h=[fnv(seed),fnv(seed+"a"),fnv(seed+"b"),fnv(seed+"c")].map(x=>x.toString(16).padStart(8,"0")).join("");return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`};
+const jhtml=o=>esc(JSON.stringify(o,null,2)).replace(/(&quot;(?:(?!&quot;).)*&quot;)(\s*:)?|\b(true|false|null)\b|-?\b\d+(?:\.\d+)?\b/g,(m,str,colon,lit)=>str?(colon?`<span class="jk">${str}</span>${colon}`:`<span class="js">${str}</span>`):lit?`<span class="jl">${m}</span>`:`<span class="jn">${m}</span>`);
+const fmtMoney=(n,cur)=>{try{return new Intl.NumberFormat("en-US",{style:"currency",currency:cur||"USD",maximumFractionDigits:0}).format(n);}catch(e){return `${cur} ${Math.round(n).toLocaleString("en-US")}`;}};
+const today=()=>new Date().toISOString().slice(0,10);
+const addDays=(d,n)=>{const x=new Date(d+"T00:00:00Z");x.setUTCDate(x.getUTCDate()+n);return x.toISOString().slice(0,10)};
+const addYears=(d,y)=>{const x=new Date(d+"T00:00:00Z");x.setUTCFullYear(x.getUTCFullYear()+y);return x.toISOString().slice(0,10)};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const RISK="WF-RISK-8801", SUBM="SUB-2026-104817", USER="uw.jlee";
+const reduceMotion=matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ================================================================ reference data (seed) */
+const US_STATES=[["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],["CA","California"],["CO","Colorado"],["CT","Connecticut"],["DE","Delaware"],["DC","District of Columbia"],["FL","Florida"],["GA","Georgia"],["HI","Hawaii"],["ID","Idaho"],["IL","Illinois"],["IN","Indiana"],["IA","Iowa"],["KS","Kansas"],["KY","Kentucky"],["LA","Louisiana"],["ME","Maine"],["MD","Maryland"],["MA","Massachusetts"],["MI","Michigan"],["MN","Minnesota"],["MS","Mississippi"],["MO","Missouri"],["MT","Montana"],["NE","Nebraska"],["NV","Nevada"],["NH","New Hampshire"],["NJ","New Jersey"],["NM","New Mexico"],["NY","New York"],["NC","North Carolina"],["ND","North Dakota"],["OH","Ohio"],["OK","Oklahoma"],["OR","Oregon"],["PA","Pennsylvania"],["RI","Rhode Island"],["SC","South Carolina"],["SD","South Dakota"],["TN","Tennessee"],["TX","Texas"],["UT","Utah"],["VT","Vermont"],["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"]];
+const it=(code,label,attrs)=>({code,label,attrs:attrs||{}});
+const REF_SEED={
+ ENTITY_TYPE:{label:"Legal entity type",items:[it("CORP","Corporation"),it("LLC","Limited liability company"),it("PART","Partnership"),it("NPO","Non-profit organisation"),it("GOV","Government entity")]},
+ COUNTRY:{label:"Country",items:[it("US","United States")]},
+ REGION:{label:"State / region",items:US_STATES.map(([c,n])=>it(c,n,{country:"US"}))},
+ CURRENCY:{label:"Currency",items:[it("USD","US Dollar",{symbol:"$",fxToUsd:1})]},
+ NAICS:{label:"NAICS industry",items:[it("622110","General Medical and Surgical Hospitals",{sic:"8062",hazard:"High"}),it("522110","Commercial Banking",{sic:"6021",hazard:"High"}),it("522130","Credit Unions",{sic:"6061",hazard:"High"}),it("611310","Colleges, Universities, and Professional Schools",{sic:"8221",hazard:"High"}),it("518210","Computing Infrastructure Providers, Data Processing, Web Hosting",{sic:"7374",hazard:"High"}),it("325412","Pharmaceutical Preparation Manufacturing",{sic:"2834",hazard:"Moderate"}),it("541511","Custom Computer Programming Services",{sic:"7371",hazard:"Moderate"}),it("488510","Freight Transportation Arrangement",{sic:"4731",hazard:"Moderate"}),it("311811","Retail Bakeries",{sic:"5461",hazard:"Low"})]},
+ BROKER:{label:"Broker of record",items:[it("PRD-20418","Harborline Risk Partners LLC"),it("PRD-31177","Crestmark Insurance Brokerage, Inc."),it("PRD-27762","Bluewater Specialty Brokers"),it("PRD-35510","Summit Ridge Insurance Services")]},
+ LIMIT:{label:"Aggregate limit",items:[1,2,3,5,10].map(m=>it(String(m*1e6),`$${m}M`))},
+ RETENTION:{label:"Retention",items:[25000,50000,100000,250000,500000].map(v=>it(String(v),"$"+v.toLocaleString("en-US")))},
+ COVERAGE:{label:"Coverage parts",items:[it("BRE","Breach response"),it("NSL","Network security liability"),it("PRL","Privacy liability"),it("REG","Regulatory defense & penalties"),it("PCI","PCI fines & assessments"),it("BI","Business interruption"),it("DBI","Dependent business interruption"),it("CYX","Cyber extortion / ransomware"),it("SEF","Social engineering fraud"),it("MED","Media liability")]},
+ YES_NO:{label:"Yes / No",items:[it("Y","Yes"),it("N","No"),it("U","Unknown")]},
+ INCIDENT_TYPE:{label:"Incident type",items:[it("RANSOM","Ransomware"),it("BEC","Business email compromise"),it("BREACH","Data breach"),it("DDOS","Denial of service"),it("OTHER","Other")]},
+ DOC_TYPE:{label:"Document type",items:[it("APP","Signed application"),it("LOSS","Loss runs"),it("SECQ","Security questionnaire"),it("FIN","Financial statements"),it("EMAIL","Broker submission email")]},
+ USER:{label:"Underwriter",items:[it("uw.jlee","Jordan Lee · Underwriter"),it("uw.pshah","Priya Shah · Senior Underwriter"),it("mgr.mchen","Morgan Chen · UW Manager")]}};
+
+/* ================================================================ field catalogue */
+const SECTIONS=[["insured","Insured"],["address","Address"],["industry","Industry & exposure"],["term","Policy term & broker"],["coverage","Coverage"],["controls","Security controls"],["incidents","Prior incidents (grid)"],["docs","Documents (upload)"],["assign","Assignment & notes"]];
+const FIELDS=[
+ {id:"insuredName",sec:"insured",label:"Named insured",type:"text",ev:"InsuredDetailsChanged",req:true},
+ {id:"dba",sec:"insured",label:"DBA / trading name",type:"text",ev:"InsuredDetailsChanged"},
+ {id:"fein",sec:"insured",label:"FEIN",type:"masked",ev:"InsuredDetailsChanged",hint:"##-#######"},
+ {id:"entityType",sec:"insured",label:"Legal entity type",type:"ref",ref:"ENTITY_TYPE",ev:"InsuredDetailsChanged"},
+ {id:"website",sec:"insured",label:"Primary domain",type:"text",ev:"InsuredDetailsChanged"},
+ {id:"yearsInBusiness",sec:"insured",label:"Years in business",type:"int",ev:"InsuredDetailsChanged"},
+ {id:"ops",sec:"insured",label:"Description of operations",type:"textarea",ev:"InsuredDetailsChanged",full:true},
+ {id:"country",sec:"address",label:"Country",type:"ref",ref:"COUNTRY",ev:"InsuredAddressChanged"},
+ {id:"state",sec:"address",label:"State / region",type:"ref",ref:"REGION",dep:"country",ev:"InsuredAddressChanged"},
+ {id:"street",sec:"address",label:"Street",type:"text",ev:"InsuredAddressChanged",full:true},
+ {id:"city",sec:"address",label:"City",type:"text",ev:"InsuredAddressChanged"},
+ {id:"zip",sec:"address",label:"ZIP / postcode",type:"text",ev:"InsuredAddressChanged"},
+ {id:"naics",sec:"industry",label:"NAICS industry classification",type:"typeahead",ref:"NAICS",ev:"IndustryClassified",full:true},
+ {id:"sic",sec:"industry",label:"SIC",type:"derived",from:"naics"},
+ {id:"hazard",sec:"industry",label:"Hazard group",type:"derived",from:"naics"},
+ {id:"revenue",sec:"industry",label:"Annual revenue",type:"money",ref:"CURRENCY",ev:"RevenueReported",full:true},
+ {id:"revenueUsd",sec:"industry",label:"Revenue in USD",type:"derived",from:"revenue"},
+ {id:"segment",sec:"industry",label:"Market segment",type:"derived",from:"revenue"},
+ {id:"employees",sec:"industry",label:"Employees",type:"int",ev:"ExposureUpdated"},
+ {id:"records",sec:"industry",label:"Sensitive records (PII/PHI/PCI)",type:"int",ev:"ExposureUpdated"},
+ {id:"onlinePct",sec:"industry",label:"Revenue from online sales",type:"pct",ev:"ExposureUpdated"},
+ {id:"effectiveDate",sec:"term",label:"Effective date",type:"date",ev:"PolicyTermChanged"},
+ {id:"expirationDate",sec:"term",label:"Expiration date",type:"derived",from:"effectiveDate"},
+ {id:"broker",sec:"term",label:"Broker of record",type:"ref",ref:"BROKER",ev:"BrokerOfRecordChanged",full:true},
+ {id:"limit",sec:"coverage",label:"Aggregate limit",type:"ref",ref:"LIMIT",ev:"CoverageTermsChanged"},
+ {id:"retention",sec:"coverage",label:"Retention",type:"ref",ref:"RETENTION",ev:"CoverageTermsChanged"},
+ {id:"coverages",sec:"coverage",label:"Coverage parts",type:"multi",ref:"COVERAGE",ev:"CoveragesSelected",full:true},
+ {id:"ransomSublimit",sec:"coverage",label:"Ransomware sublimit (50%) applies",type:"toggle",ev:"CoverageTermsChanged",full:true},
+ {id:"mfa",sec:"controls",label:"MFA enforced on all remote access?",type:"radio",ref:"YES_NO",ev:"SecurityControlAnswered",full:true},
+ {id:"edr",sec:"controls",label:"EDR deployed on all endpoints?",type:"radio",ref:"YES_NO",ev:"SecurityControlAnswered",full:true},
+ {id:"backups",sec:"controls",label:"Offline / immutable backups?",type:"radio",ref:"YES_NO",ev:"SecurityControlAnswered",full:true},
+ {id:"underwriter",sec:"assign",label:"Assigned underwriter",type:"ref",ref:"USER",ev:"UnderwriterAssigned",full:true}];
+const FIELD=Object.fromEntries(FIELDS.map(f=>[f.id,f]));
+const TYPE_TAG={text:"TEXT",masked:"TEXT · masked ##-#######",textarea:"TEXT · multi-line",int:"NUMBER · integer",pct:"NUMBER · percent 0–100",date:"DATE",money:"MONEY · amount + CURRENCY ref",ref:"REFERENCE",typeahead:"REFERENCE · type-ahead",multi:"REFERENCE · multi-select",radio:"REFERENCE · radio",toggle:"BOOLEAN · toggle",derived:"DERIVED · read-only"};
+
+/* ================================================================ world */
+let W;
+function initialRisk(){return {insuredName:"Northwind Regional Medical Center, Inc.",dba:"Northwind Health",fein:"31-4827715",entityType:"NPO",website:"northwindrmc.example",yearsInBusiness:64,ops:"Regional acute-care hospital system with 3 campuses, 14 outpatient clinics and an online patient portal.",
+  country:"US",state:"OH",street:"1200 Riverside Parkway",city:"Columbus",zip:"43215",naics:"622110",revenue:{amount:412000000,currency:"USD",fxToUsd:1,usd:412000000},employees:2850,records:1200000,onlinePct:4,
+  effectiveDate:addDays(today(),30),expirationDate:addYears(addDays(today(),30),1),broker:"PRD-20418",limit:"5000000",retention:"250000",coverages:["BRE","NSL","PRL","REG","BI","CYX"],ransomSublimit:true,mfa:"Y",edr:"Y",backups:"N",underwriter:"uw.jlee"};}
+function newWorld(){
+  W={mtEvents:[],seq:51230,ref:{},kafka:[],kOffsets:{"pc.risk.form.updated":88213,"pc.refdata.changed":3120},snow:{RISK_FORM_EVENTS:[],DIM_REFERENCE:[]},es:null,blobs:[],rejected:[],log:[],sbWaiting:[],refCacheVersion:{},outboxPos:51230,lastChangedKeys:[],selectedEvent:null,tt:null};
+  const t0=Date.now()-3600e3;
+  // reference data streams
+  Object.entries(REF_SEED).forEach(([set,def],k)=>{appendEvent(`refdata-${set}`,"ReferenceSetPublished",{set,label:def.label,version:1,items:def.items.map(x=>({...x,active:true,since:1}))},"refdata-admin",new Date(t0+k*1000).toISOString());});
+  rebuildRef();
+  // risk stream seed
+  appendEvent(RISK,"RiskCreatedFromSubmission",{submissionId:SUBM,applicationId:"APP-3104553",initial:initialRisk(),refVersions:Object.fromEntries(Object.keys(REF_SEED).map(s=>[s,1]))},"cyber-api (Kafka rider)",new Date(t0+60e3).toISOString());
+  appendEvent(RISK,"DocumentAttached",{docId:"DOC-0001",docType:"EMAIL",fileName:"Harborline_submission_email.pdf",size:184220,contentType:"application/pdf",sha256:"9b1c…e04a",blobUri:`https://stcyberdocs.blob.core.windows.net/risk-docs/${RISK}/DOC-0001.pdf`},"intake-svc",new Date(t0+70e3).toISOString());
+  appendEvent(RISK,"DocumentScanned",{docId:"DOC-0001",result:"No threats found",scanner:"Defender for Storage"},"defender-scan",new Date(t0+90e3).toISOString());
+  W.outboxPos=W.seq; W.es=esDoc(stateAt());
+  Object.keys(REF_SEED).forEach(s=>W.refCacheVersion[s]=1);
+}
+function appendEvent(stream,type,data,user,ts){
+  const ver=W.mtEvents.filter(e=>e.stream_id===stream).length+1;
+  const e={seq_id:++W.seq,id:uuid(stream+type+W.seq),stream_id:stream,version:ver,type,data,user,timestamp:ts||new Date().toISOString()};
+  W.mtEvents.push(e);return e;
+}
+const riskEvents=()=>W.mtEvents.filter(e=>e.stream_id===RISK);
+const streamVersion=s=>W.mtEvents.filter(e=>e.stream_id===s).length;
+
+/* ---------- reducers (projections are rebuilt from events) */
+function stateAt(maxVersion){
+  const s={f:{},incidents:[],documents:[],notes:[],warnings:[],refVersions:{},version:0,lastModified:null,lastModifiedBy:null,status:"AWAITING_RISK_DETAILS"};
+  for(const e of riskEvents()){ if(maxVersion&&e.version>maxVersion)break; applyEvent(s,e); }
+  return s;
+}
+function applyEvent(s,e){
+  const d=e.data; s.version=e.version; s.lastModified=e.timestamp; s.lastModifiedBy=e.user;
+  switch(e.type){
+    case "RiskCreatedFromSubmission": s.f=structuredClone(d.initial); s.refVersions={...d.refVersions}; s.submissionId=d.submissionId; s.applicationId=d.applicationId; break;
+    case "PriorIncidentAdded": s.incidents.push({...d.row}); break;
+    case "PriorIncidentRemoved": s.incidents=s.incidents.filter(r=>r.rowId!==d.rowId); break;
+    case "DocumentAttached": s.documents.push({docId:d.docId,docType:d.docType,fileName:d.fileName,size:d.size,sha256:d.sha256,blobUri:d.blobUri,scan:"pending"}); break;
+    case "DocumentScanned": {const doc=s.documents.find(x=>x.docId===d.docId);if(doc)doc.scan=d.result;break;}
+    case "NoteAdded": s.notes.push({text:d.text,by:e.user,at:e.timestamp}); break;
+    case "AppetiteWarningRaised": s.warnings.push(d.reason); break;
+    case "AppetiteWarningCleared": s.warnings=[]; break;
+    default: if(d.changes) for(const c of d.changes){ s.f[c.field]=structuredClone(c.to); if(c.refSet) s.refVersions[c.refSet]=c.refVersion; }
+  }
+}
+function rebuildRef(){
+  W.ref={};
+  for(const e of W.mtEvents.filter(e=>e.stream_id.startsWith("refdata-"))){
+    const set=e.data.set;
+    if(e.type==="ReferenceSetPublished") W.ref[set]={label:e.data.label,version:e.data.version,items:structuredClone(e.data.items)};
+    else if(e.type==="ReferenceItemsAdded"){const r=W.ref[set];r.version=e.data.version;e.data.items.forEach(x=>r.items.push({...x,active:true,since:e.data.version}));}
+    else if(e.type==="ReferenceItemRetired"){const r=W.ref[set];r.version=e.data.version;const x=r.items.find(i=>i.code===e.data.code);if(x){x.active=false;x.retiredIn=e.data.version;}}
+    else if(e.type==="ReferenceItemReactivated"){const r=W.ref[set];r.version=e.data.version;const x=r.items.find(i=>i.code===e.data.code);if(x){x.active=true;delete x.retiredIn;}}
+  }
+}
+const refItem=(set,code)=>W.ref[set]?.items.find(i=>i.code===String(code));
+const refLabel=(set,code)=>{const x=refItem(set,code);return x?x.label:code;};
+
+/* derived values (computed by the read model, never typed) */
+function derived(f){
+  const n=refItem("NAICS",f.naics);
+  const usd=f.revenue?.usd??0;
+  return {sic:n?.attrs.sic||"—",hazard:n?.attrs.hazard||"—",revenueUsd:fmtMoney(usd,"USD")+(f.revenue?.currency!=="USD"?` (rate ${f.revenue.fxToUsd})`:""),segment:usd>50e6?"Middle Market (> $50M)":"Small Commercial (≤ $50M)",expirationDate:f.expirationDate};
+}
+function esDoc(s){const f=s.f;return {riskId:RISK,submissionId:SUBM,version:s.version,status:s.status,insuredName:f.insuredName,dba:f.dba,state:f.state,country:f.country,naics:f.naics,naicsTitle:refLabel("NAICS",f.naics),revenueUsd:f.revenue?.usd,revenueCurrency:f.revenue?.currency,segment:(f.revenue?.usd||0)>50e6?"MIDDLE_MARKET":"SMALL_COMMERCIAL",limit:+f.limit,retention:+f.retention,coverages:f.coverages,broker:refLabel("BROKER",f.broker),assignee:f.underwriter,documents:s.documents.length,openWarnings:s.warnings.length,lastModified:s.lastModified};}
+
+/* ================================================================ voice */
+const synth=("speechSynthesis" in window)?window.speechSynthesis:null;
+let voiceOn=!!synth, voices=[], pace=1, speakTok=0;
+function loadVoices(){if(!synth)return;voices=synth.getVoices().filter(v=>/^en/i.test(v.lang));const sel=$("#voiceSel"),cur=sel.value;sel.innerHTML=`<option value="">Default</option>`+voices.map(v=>`<option value="${esc(v.name)}">${esc(v.name)}</option>`).join("");sel.value=cur;}
+if(synth){loadVoices();synth.onvoiceschanged=loadVoices;}
+function say(text){ // shows text and (optionally) speaks it; resolves when done
+  $("#narr").textContent=text; const tok=++speakTok; const words=text.split(/\s+/).length;
+  const est=Math.max(2500,words*360)*pace;
+  return new Promise(res=>{
+    if(!voiceOn||!synth){setTimeout(()=>{if(tok===speakTok)res();else res();},est);return;}
+    synth.cancel(); $("#live").classList.add("on");
+    const parts=(text.match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g)||[text]).map(x=>x.trim()).filter(Boolean);
+    const v=voices.find(v=>v.name===$("#voiceSel").value);
+    const done=()=>{clearTimeout(wd);$("#live").classList.remove("on");res();};
+    const wd=setTimeout(done,est*2+4000);
+    parts.forEach((p,k)=>{const u=new SpeechSynthesisUtterance(p);if(v)u.voice=v;u.lang=v?.lang||"en-US";u.rate=1/Math.max(.8,Math.min(1.25,pace));if(k===parts.length-1){u.onend=done;u.onerror=done;}synth.speak(u);});
+  });
+}
+
+/* ================================================================ pipeline */
+const STAGES=[
+ {id:"ui",ic:"UI",t:"Workbench (browser)",s:"SPA · builds a command from the field change",k:"--c-ui"},
+ {id:"api",ic:"API",t:"Web API",s:"ASP.NET Core · App Service · 202 Accepted",k:"--c-http"},
+ {id:"blob",ic:"BLOB",t:"Azure Blob Storage",s:"stcyberdocs · private endpoint · Defender scan",k:"--c-blob"},
+ {id:"sb",ic:"SB",t:"Azure Service Bus",s:"queue lm-commands · session = risk ID",k:"--c-sb"},
+ {id:"lm",ic:"LM",t:"Lifecycle Manager · form plugin",s:"validates against reference data, emits events",k:"--c-logic"},
+ {id:"pg",ic:"PG",t:"PostgreSQL · Marten",s:"cyber_api_db · mt_events + inline snapshot",k:"--c-pg"},
+ {id:"outbox",ic:"OUT",t:"Outbox daemon",s:"Marten async daemon · seq_id order",k:"--c-pg"},
+ {id:"es",ic:"ES",t:"Elasticsearch",s:"risk-dashboard projection",k:"--c-es"},
+ {id:"kafka",ic:"KAF",t:"Kafka",s:"pc.risk.form.updated / pc.refdata.changed",k:"--c-kafka"},
+ {id:"cache",ic:"REF",t:"Reference-data cache",s:"in cyber-api · consumer cg-refdata-cache",k:"--c-sb"},
+ {id:"snow",ic:"SNOW",t:"Snowflake (Kafka Connect)",s:"CYBER_DW.RAW",k:"--c-snow"},
+ {id:"sr",ic:"SR",t:"SignalR → browser",s:"/hubs/risk · group risk:"+RISK,k:"--c-sr"}];
+function renderStages(){$("#stages").innerHTML=STAGES.map(s=>`<div class="stg" id="st-${s.id}" style="--k:var(${s.k})"><div class="ic">${s.ic}</div><div><b>${esc(s.t)}</b><small>${esc(s.s)}</small><div class="sd" id="sd-${s.id}"></div>${s.id==="sb"?`<div class="queue" id="sbq"></div>`:""}</div></div>`).join("");}
+let busy=false; const queue=[];
+function enqueue(job){return new Promise(res=>{queue.push({job,res});renderSbQueue();if(!busy)pump();});}
+async function pump(){busy=true;while(queue.length){const {job,res}=queue.shift();renderSbQueue();try{res(await runJob(job));}catch(e){console.error(e);res(null);}}busy=false;$("#pipeSub").textContent="idle";}
+function renderSbQueue(){const q=$("#sbq");if(q)q.innerHTML=queue.map(x=>`<span>${esc(x.job.label)}</span>`).join("")+(queue.length?`<span style="border:0">${queue.length} waiting in session order</span>`:"");}
+const stepMs=()=>reduceMotion?0:Math.round(480*pace);
+async function runJob(job){
+  // job: {label, stages:[{id, text, fail?, act?}], explain:[...], cmd, events}
+  $("#pipeSub").textContent=job.label;
+  STAGES.forEach(s=>{const e=$("#st-"+s.id);e.className="stg";$("#sd-"+s.id).textContent="";});
+  job.stages.forEach(st=>$("#st-"+st.id).classList.add("part"));
+  $("#cmdJson").innerHTML=job.cmd?jhtml(job.cmd):"—";
+  $("#evJson").textContent="(waiting…)";
+  const ex=$("#explain"); ex.innerHTML="";
+  let result=null;
+  for(let k=0;k<job.stages.length;k++){
+    const st=job.stages[k], el=$("#st-"+st.id);
+    el.classList.add("on");
+    const r=st.act?await st.act():null; // side effect at this stage
+    const text=typeof st.text==="function"?st.text(r):st.text;
+    $("#sd-"+st.id).textContent=text;
+    ex.insertAdjacentHTML("beforeend",`<li class="${st.fail&&r&&r.failed?"fail":""}">${esc(st.explain?(typeof st.explain==="function"?st.explain(r):st.explain):text)}</li>`);
+    await sleep(stepMs());
+    el.classList.remove("on");
+    if(r&&r.failed){el.classList.add("fail");result=r;break;}
+    el.classList.add("done");
+    if(r&&r.events) {$("#evJson").innerHTML=jhtml(r.events);result=r;}
+    renderRight();
+  }
+  if(!result||!result.events) if($("#evJson").textContent==="(waiting…)") $("#evJson").textContent=result&&result.failed?"No event: the command was rejected, so nothing was stored.":"—";
+  renderRight(); renderWorkbenchHead();
+  return result;
+}
+
+/* ================================================================ commands */
+let cmdSeq=0;
+function fieldValueFromUI(id){
+  const f=FIELD[id];
+  if(f.type==="money"){return {amount:Number($("#f-revenue-amt").value),currency:$("#f-revenue-cur").value};}
+  if(f.type==="multi"){return [...document.querySelectorAll(`[name="f-${id}"]:checked`)].map(x=>x.value);}
+  if(f.type==="radio"){const x=document.querySelector(`[name="f-${id}"]:checked`);return x?x.value:null;}
+  if(f.type==="toggle"){return $("#f-"+id).checked;}
+  if(f.type==="int"||f.type==="pct"){const v=$("#f-"+id).value;return v===""?null:Number(v);}
+  if(f.type==="typeahead"){const v=$("#f-"+id).value.split(" · ")[0].trim();return v;}
+  return $("#f-"+id).value;
+}
+function fieldStatus(id,cls,msg){const el=$("#fld-"+id);if(!el)return;el.classList.remove("pending","saved","error");if(cls)el.classList.add(cls);const st=el.querySelector(".fstat");if(st)st.textContent=msg||"";}
+
+function validate(changes,s){
+  for(const c of changes){
+    const f=FIELD[c.field];const v=c.to;
+    if(!f)continue;
+    if(f.req&&(!v||!String(v).trim()))return `${f.label} is required`;
+    if(f.type==="masked"&&!/^\d{2}-\d{7}$/.test(v))return `FEIN must look like 12-3456789`;
+    if(f.type==="int"&&(v==null||!Number.isInteger(v)||v<0))return `${f.label} must be a whole number of 0 or more`;
+    if(f.type==="pct"&&(v==null||v<0||v>100))return `${f.label} must be between 0 and 100`;
+    if(f.type==="money"&&!(v.amount>0))return `Revenue must be greater than zero`;
+    if(f.type==="date"){const min=addDays(today(),-30),max=addDays(today(),180);if(!v||v<min||v>max)return `Effective date must be between ${min} and ${max}`;}
+    if(f.ref&&f.type!=="multi"&&f.type!=="money"&&v!=null&&v!==""){const x=refItem(f.ref,v);if(!x)return `${v} is not a value in ${f.ref}`;if(!x.active)return `${x.label} (${v}) was retired in ${f.ref} v${x.retiredIn}`;}
+    if(f.type==="money"){const x=refItem("CURRENCY",v.currency);if(!x||!x.active)return `Currency ${v.currency} is not active`;}
+    if(f.type==="multi"){for(const code of v){const x=refItem(f.ref,code);if(!x||!x.active)return `Coverage ${code} is not active`;}}
+    if(c.field==="state"){const x=refItem("REGION",v);const country=changes.find(z=>z.field==="country")?.to??s.f.country;if(v&&x&&x.attrs.country!==country)return `${x.label} is not a region of ${country}`;}
+  }
+  return null;
+}
+
+async function submitChange(fieldId,value,opts={}){
+  const s=stateAt(); const f=FIELD[fieldId];
+  const user=opts.user||USER;
+  let changes=[{field:fieldId,from:structuredClone(s.f[fieldId]),to:structuredClone(value)}];
+  if(JSON.stringify(changes[0].from)===JSON.stringify(changes[0].to)&&!opts.force){fieldStatus(fieldId,"saved",`no change · v${s.version}`);return;}
+  if(f.type==="money"){const cur=refItem("CURRENCY",value.currency);const fx=cur?.attrs.fxToUsd??1;changes[0].to={amount:value.amount,currency:value.currency,fxToUsd:fx,usd:Math.round(value.amount*fx)};}
+  if(f.type==="date") changes.push({field:"expirationDate",from:s.f.expirationDate,to:addYears(value,1)});
+  if(fieldId==="country"){const valid=W.ref.REGION.items.find(i=>i.code===s.f.state&&i.attrs.country===value);if(!valid)changes.push({field:"state",from:s.f.state,to:""});}
+  for(const c of changes){const ff=FIELD[c.field];const set=ff?.ref;if(set){c.refSet=set;c.refVersion=W.ref[set].version;}}
+  const expected=opts.expectedVersion??s.version;
+  const cmdType={InsuredDetailsChanged:"UpdateInsuredDetails",InsuredAddressChanged:"UpdateInsuredAddress",IndustryClassified:"ClassifyIndustry",RevenueReported:"ReportRevenue",ExposureUpdated:"UpdateExposure",PolicyTermChanged:"ChangePolicyTerm",BrokerOfRecordChanged:"ChangeBrokerOfRecord",CoverageTermsChanged:"ChangeCoverageTerms",CoveragesSelected:"SelectCoverages",SecurityControlAnswered:"AnswerSecurityControl",UnderwriterAssigned:"AssignUnderwriter"}[f.ev]||"UpdateRiskField";
+  const cmd={commandId:uuid("cmd"+(++cmdSeq)),type:cmdType,riskId:RISK,expectedVersion:expected,issuedBy:user,issuedAt:new Date().toISOString(),changes:changes.map(c=>({field:c.field,value:c.to,...(c.refSet?{refSet:c.refSet,refVersion:c.refVersion}:{})}))};
+  fieldStatus(fieldId,"pending","sending…");
+  const label=`${cmdType}`;
+  const isConflictProne=opts.expectedVersion!=null;
+  const res=await enqueue({label,cmd,stages:riskStages({cmd,changes,fieldId,user,isConflictProne})});
+  return res;
+}
+
+function riskStages({cmd,changes,fieldId,user,isConflictProne,eventType,eventData,extraBefore}){
+  const f=FIELD[fieldId]; const evType=eventType||f?.ev;
+  let appended=null, rejectMsg=null, kRec=null;
+  const ms=30+(fnv(cmd.commandId)%25);
+  const st=[
+   {id:"ui",text:`${cmd.type} · expectedVersion ${cmd.expectedVersion} · by ${cmd.issuedBy}`,explain:`The ${f?`"${f.label}" field`:"workbench"} built a ${cmd.type} command. It carries the change, the reference-data version the user picked from, and the stream version the screen was showing (${cmd.expectedVersion}).`},
+   {id:"api",text:`PUT /api/risks/${RISK}/commands → 202 Accepted · ${ms} ms`,explain:`The Web API answered 202 Accepted in ${ms} ms. That means "received", not "valid": validation happens further down.`},
+   ...(extraBefore||[]),
+   {id:"sb",text:`lm-commands · SessionId ${RISK}`,explain:`The command went onto the Service Bus queue in this risk's session, so commands for one risk are applied one at a time, in order.`},
+   {id:"lm",act:()=>{const s=stateAt();rejectMsg=validate(changes,s);if(rejectMsg){W.rejected.push({at:new Date().toISOString(),command:cmd.type,field:fieldId,reason:rejectMsg});return {failed:true,reason:rejectMsg};}return null;},
+     text:r=>r&&r.failed?`REJECTED · ${r.reason}`:`validated against reference data · event ${evType}`,explain:r=>r&&r.failed?`The form plugin rejected the command: ${r.reason}. Nothing is written to the event store.`:`The form plugin checked the value against the rules and the current reference data, then produced a ${evType} event (staged in memory).`,fail:true},
+   {id:"pg",act:()=>{const cur=streamVersion(RISK);if(cmd.expectedVersion!==cur){const between=riskEvents().filter(e=>e.version>cmd.expectedVersion);const clash=between.some(e=>e.user!==user&&(e.data.changes||[]).some(c=>changes.some(x=>x.field===c.field)));if(clash){rejectMsg=`ConcurrencyConflict: stream is at v${cur}, command expected v${cmd.expectedVersion} and ${changes[0].field} was changed in between`;W.rejected.push({at:new Date().toISOString(),command:cmd.type,field:fieldId,reason:rejectMsg});return {failed:true,reason:rejectMsg};}}
+       const data=eventData||{changes};appended=appendEvent(RISK,evType,data,user);const extra=[];
+       if(fieldId==="country"){const now=stateAt();const nonUS=now.f.country!=="US";if(nonUS&&!now.warnings.length)extra.push(appendEvent(RISK,"AppetiteWarningRaised",{reason:`Country ${now.f.country}: outside US cyber Middle Market appetite`},"AppetiteValidation"));if(!nonUS&&now.warnings.length)extra.push(appendEvent(RISK,"AppetiteWarningCleared",{reason:"Country back to US"},"AppetiteValidation"));}
+       return {events:[appended,...extra].map(e=>({seq_id:e.seq_id,stream_id:e.stream_id,version:e.version,type:e.type,data:e.data,user:e.user,timestamp:e.timestamp}))};},
+     text:r=>r&&r.failed?r.reason:`appended v${appended.version} · seq ${appended.seq_id}${r.events.length>1?` (+${r.events.length-1} more)`:""} · snapshot updated`,
+     explain:r=>r&&r.failed?`Marten's optimistic concurrency check failed: ${r.reason}. The transaction rolled back.`:`One PostgreSQL transaction appended ${evType} to mt_events as version ${appended.version} of stream ${RISK} (seq_id ${appended.seq_id}) and updated the snapshot document inline. Events are never updated or deleted.`,fail:true},
+   {id:"outbox",act:()=>{const from=W.outboxPos+1;W.outboxPos=W.seq;return {from,to:W.seq};},text:r=>`seq ${r.from} → ${r.to}`,explain:r=>`After the commit, the outbox daemon read seq_id ${r.from}–${r.to} and fanned the change out.`},
+   {id:"es",act:()=>{W.es=esDoc(stateAt());return null;},text:`PUT risk-dashboard/_doc/${RISK} (v${streamVersion(RISK)})`,explain:"Elasticsearch's risk-dashboard document was replaced with the new state, so queues and dashboards show it."},
+   {id:"kafka",act:()=>{const s=stateAt();kRec=kafka("pc.risk.form.updated",RISK,{riskId:RISK,eventId:appended.id,eventType:evType,streamVersion:appended.version,changes:(appended.data.changes||[]).map(c=>({field:c.field,value:JSON.stringify(c.to),refSet:c.refSet||null,refVersion:c.refVersion||null})),payload:appended.data.changes?null:JSON.stringify(appended.data),changedBy:user,occurredAt:appended.timestamp});return null;},text:()=>`pc.risk.form.updated · P${kRec.partition} @ ${kRec.offset} · key ${RISK}`,explain:()=>`A RiskFormUpdated record was produced to Kafka (partition ${kRec.partition}, offset ${kRec.offset}, key = risk ID) for other domains.`},
+   {id:"snow",act:()=>{W.snow.RISK_FORM_EVENTS.push({RECORD_METADATA:{topic:kRec.topic,partition:kRec.partition,offset:kRec.offset,key:kRec.key},RECORD_CONTENT:kRec.value});return null;},text:"row → CYBER_DW.RAW.RISK_FORM_EVENTS",explain:"Kafka Connect streamed the record into Snowflake for analytics."},
+   {id:"sr",act:()=>{applyLiveUpdate(changes,appended);return null;},text:()=>`FieldSaved → ${changes.map(c=>c.field).join(", ")} · v${appended.version}`,explain:"SignalR pushed FieldSaved to the browser. The field turned green and the screen's stream version moved forward."}];
+  // on rejection, SignalR still informs the UI (late error)
+  const lmIdx=st.findIndex(x=>x.id==="lm");
+  const orig=st[lmIdx].act; const origPg=st.find(x=>x.id==="pg").act;
+  st[lmIdx].act=()=>{const r=orig();if(r&&r.failed)lateError(fieldId,r.reason);return r;};
+  st.find(x=>x.id==="pg").act=()=>{const r=origPg();if(r&&r.failed)lateError(fieldId,r.reason);return r;};
+  return st;
+}
+function lateError(fieldId,reason){
+  setTimeout(()=>{const el=$("#st-sr");el.classList.add("fail");const kind=reason.startsWith("Concurrency")?"ConcurrencyConflict":"ValidationFailed";$("#sd-sr").textContent=`${kind} → ${fieldId||"form"}`;
+    $("#explain").insertAdjacentHTML("beforeend",`<li class="fail">SignalR then pushed ${reason.startsWith("Concurrency")?"ConcurrencyConflict":"ValidationFailed"} to the browser. The field shows the error after the 202 had already said "accepted": the late error from transcript §1.1.</li>`);
+    fieldStatus(fieldId,"error",reason);renderLog();},stepMs());
+}
+function kafka(topic,key,value){const p=fnv(key)%6;const off=W.kOffsets[topic]++;const r={topic,partition:p,offset:off,key,value,ts:new Date().toISOString(),schemaId:topic==="pc.risk.form.updated"?1071:1102};W.kafka.push(r);return r;}
+function applyLiveUpdate(changes,ev){
+  W.lastChangedKeys=changes.map(c=>c.field);
+  W.log.unshift({at:ev.timestamp,cmd:ev.type,v:ev.version,by:ev.user,result:"stored"});
+  if(W.tt) return; // in time travel the form is frozen
+  for(const c of changes){
+    const el=$("#fld-"+c.field);
+    if(el){setFieldUI(c.field,c.to);fieldStatus(c.field,"saved",`saved · v${ev.version} · ${ev.user}`);el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash");}
+  }
+  refreshDerived(); renderLog();
+}
+
+/* ---------- grid rows, uploads, notes, reference data */
+async function addIncident(row){
+  const s=stateAt();const rowId="INC-"+String(s.incidents.length+1+W.seq%97).padStart(3,"0");
+  const r={rowId,date:row.date,type:row.type,amount:Number(row.amount)||0};
+  const cmd={commandId:uuid("cmd"+(++cmdSeq)),type:"AddPriorIncident",riskId:RISK,expectedVersion:s.version,issuedBy:USER,row:r};
+  const res=await enqueue({label:"AddPriorIncident",cmd,stages:riskStages({cmd,changes:[],fieldId:null,user:USER,eventType:"PriorIncidentAdded",eventData:{row:r}}).map(st=>st.id==="lm"?{...st,act:()=>{if(!refItem("INCIDENT_TYPE",r.type))return {failed:true,reason:"unknown incident type"};return null;},text:r2=>r2&&r2.failed?"REJECTED":`grid row ${rowId} validated (INCIDENT_TYPE v${W.ref.INCIDENT_TYPE.version})`}:st.id==="sr"?{...st,act:()=>{W.lastChangedKeys=["incidents"];W.log.unshift({at:new Date().toISOString(),cmd:"PriorIncidentAdded",v:streamVersion(RISK),by:USER,result:"stored"});renderIncidents();renderLog();return null;},text:`RowAdded → incidents · ${rowId}`}:st)});
+  return res;
+}
+async function removeIncident(rowId){
+  const s=stateAt();const cmd={commandId:uuid("cmd"+(++cmdSeq)),type:"RemovePriorIncident",riskId:RISK,expectedVersion:s.version,issuedBy:USER,rowId};
+  await enqueue({label:"RemovePriorIncident",cmd,stages:riskStages({cmd,changes:[],fieldId:null,user:USER,eventType:"PriorIncidentRemoved",eventData:{rowId}}).map(st=>st.id==="lm"?{...st,act:()=>null,text:`row ${rowId} exists → remove`}:st.id==="sr"?{...st,act:()=>{W.lastChangedKeys=["incidents"];W.log.unshift({at:new Date().toISOString(),cmd:"PriorIncidentRemoved",v:streamVersion(RISK),by:USER,result:"stored"});renderIncidents();renderLog();return null;},text:`RowRemoved → ${rowId}`}:st)});
+}
+async function sha256Hex(buf){try{const h=await crypto.subtle.digest("SHA-256",buf);return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,"0")).join("");}catch(e){return (fnv(String(buf.byteLength))>>>0).toString(16).padStart(8,"0")+"…(sha unavailable)";}}
+async function uploadDoc(file,docType){
+  const buf=await file.arrayBuffer();const sha=await sha256Hex(buf);
+  const s=stateAt();const docId="DOC-"+String(s.documents.length+1).padStart(4,"0");
+  const ext=(file.name.split(".").pop()||"bin").toLowerCase();
+  const blobUri=`https://stcyberdocs.blob.core.windows.net/risk-docs/${RISK}/${docId}.${ext}`;
+  const meta={docId,docType,fileName:file.name,size:file.size,contentType:file.type||"application/octet-stream",sha256:sha,blobUri};
+  const cmd={commandId:uuid("cmd"+(++cmdSeq)),type:"AttachDocument",riskId:RISK,expectedVersion:s.version,issuedBy:USER,document:meta};
+  const stages=riskStages({cmd,changes:[],fieldId:null,user:USER,eventType:"DocumentAttached",eventData:meta,
+    extraBefore:[{id:"blob",act:()=>{W.blobs.push({...meta,uploadedAt:new Date().toISOString(),scan:"pending",tier:"Hot",immutability:"7 years"});return null;},text:`PUT ${docId}.${ext} · ${file.size.toLocaleString()} bytes · sha256 ${sha.slice(0,12)}…`,explain:`The browser asked the API for a short-lived SAS URL, then uploaded "${file.name}" (${file.size.toLocaleString()} bytes) straight to Blob Storage. Only the metadata and SHA-256 hash travel as an event; the file itself never goes into PostgreSQL or Kafka.`}]})
+    .map(st=>st.id==="api"?{...st,text:`POST /api/risks/${RISK}/documents/upload-url → 201 (SAS, 10 min)`}:st.id==="lm"?{...st,act:()=>{if(file.size>25e6)return {failed:true,reason:"file larger than 25 MB"};return null;},text:r=>r&&r.failed?"REJECTED":`DocumentAttached · DOC_TYPE ${docType} (v${W.ref.DOC_TYPE.version})`}:st.id==="sr"?{...st,act:()=>{W.lastChangedKeys=["documents"];W.log.unshift({at:new Date().toISOString(),cmd:"DocumentAttached",v:streamVersion(RISK),by:USER,result:"stored"});renderDocs();renderLog();return null;},text:`DocumentAttached → documents · ${docId} (scan pending)`}:st);
+  await enqueue({label:"AttachDocument",cmd,stages});
+  // asynchronous malware scan result → second event
+  const cmd2={source:"Microsoft Defender for Storage → Event Grid → Service Bus",type:"RecordDocumentScan",riskId:RISK,docId,result:"No threats found"};
+  await enqueue({label:"RecordDocumentScan",cmd:cmd2,stages:[
+    {id:"blob",act:()=>{const b=W.blobs.find(x=>x.docId===docId);if(b)b.scan="No threats found";return null;},text:`Defender scan of ${docId}: No threats found`,explain:"A few seconds later Defender for Storage finished scanning the blob and raised a scan-result event through Event Grid."},
+    {id:"sb",text:"RecordDocumentScan → lm-commands",explain:"The scan result arrived as a command on the same risk session."},
+    {id:"lm",text:"DocumentScanned",explain:"The workflow recorded the scan result as a new event. The earlier DocumentAttached event is never edited."},
+    {id:"pg",act:()=>{const e=appendEvent(RISK,"DocumentScanned",{docId,result:"No threats found",scanner:"Defender for Storage"},"defender-scan");return {events:[{seq_id:e.seq_id,version:e.version,type:e.type,data:e.data}]};},text:()=>`appended v${streamVersion(RISK)}`,explain:"DocumentScanned appended to the stream."},
+    {id:"outbox",act:()=>{const from=W.outboxPos+1;W.outboxPos=W.seq;return {from,to:W.seq};},text:r=>`seq ${r.from} → ${r.to}`},
+    {id:"es",act:()=>{W.es=esDoc(stateAt());return null;},text:"risk-dashboard updated"},
+    {id:"sr",act:()=>{renderDocs();return null;},text:`DocumentScanned → ${docId} clean`,explain:"The browser's document list switched from 'scan pending' to 'clean'."}]});
+}
+async function addNote(text){
+  const s=stateAt();const cmd={commandId:uuid("cmd"+(++cmdSeq)),type:"AddNote",riskId:RISK,expectedVersion:s.version,issuedBy:USER,text};
+  await enqueue({label:"AddNote",cmd,stages:riskStages({cmd,changes:[],fieldId:null,user:USER,eventType:"NoteAdded",eventData:{text}}).map(st=>st.id==="lm"?{...st,act:()=>text.trim()?null:{failed:true,reason:"empty note"},text:"NoteAdded (append-only)"}:st.id==="sr"?{...st,act:()=>{renderNotes();W.log.unshift({at:new Date().toISOString(),cmd:"NoteAdded",v:streamVersion(RISK),by:USER,result:"stored"});renderLog();return null;},text:"NoteAdded → notes"}:st)});
+}
+async function refChange(set,kind,payload){
+  const r=W.ref[set];const nextV=r.version+1;
+  const type=kind==="add"?"ReferenceItemsAdded":kind==="retire"?"ReferenceItemRetired":"ReferenceItemReactivated";
+  const data=kind==="add"?{set,version:nextV,items:payload.items}:{set,version:nextV,code:payload.code};
+  const cmd={commandId:uuid("cmd"+(++cmdSeq)),type:kind==="add"?"AddReferenceItems":kind==="retire"?"RetireReferenceItem":"ReactivateReferenceItem",set,expectedVersion:r.version,issuedBy:"refdata-admin",...(kind==="add"?{items:payload.items}:{code:payload.code})};
+  let ev,kRec;
+  await enqueue({label:cmd.type,cmd,stages:[
+   {id:"ui",text:`${cmd.type} on ${set} (v${r.version} → v${nextV})`,explain:`An administrator changed the ${set} reference list in the reference-data admin screen. Reference data has its own event stream, refdata-${set}.`},
+   {id:"api",text:`POST /api/refdata/${set}/changes → 202 Accepted`,explain:"The reference-data API accepted the change."},
+   {id:"lm",act:()=>{if(kind==="add"){for(const x of payload.items){if(!x.code||!x.label)return {failed:true,reason:"code and label are required"};if(refItem(set,x.code))return {failed:true,reason:`${x.code} already exists in ${set}`};}}return null;},text:r2=>r2&&r2.failed?`REJECTED · ${r2.reason}`:`${type} validated`,explain:r2=>r2&&r2.failed?`Rejected: ${r2.reason}.`:"The reference-data handler checked for duplicates. Codes are permanent: they can be retired but never reused or deleted, so old events always stay readable.",fail:true},
+   {id:"pg",act:()=>{ev=appendEvent(`refdata-${set}`,type,data,"refdata-admin");rebuildRef();return {events:[{seq_id:ev.seq_id,stream_id:ev.stream_id,version:ev.version,type:ev.type,data:ev.data}]};},text:()=>`refdata-${set} v${ev.version} · seq ${ev.seq_id} · projection ref_${set.toLowerCase()} updated`,explain:()=>`${type} was appended to stream refdata-${set} as version ${nextV}, and the reference-data projection was rebuilt from that stream.`},
+   {id:"outbox",act:()=>{const from=W.outboxPos+1;W.outboxPos=W.seq;return {from,to:W.seq};},text:x=>`seq ${x.from} → ${x.to}`},
+   {id:"kafka",act:()=>{kRec=kafka("pc.refdata.changed",set,{set,version:nextV,change:type,items:W.ref[set].items.map(i=>({code:i.code,label:i.label,active:i.active,attrs:i.attrs}))});return null;},text:()=>`pc.refdata.changed · key ${set} · P${kRec.partition} @ ${kRec.offset} (compacted)`,explain:()=>`The full ${set} list (v${nextV}) was published to pc.refdata.changed with key ${set}. The topic is log-compacted, so Kafka keeps only the latest version per list and any service can rebuild its cache from it.`},
+   {id:"cache",act:()=>{W.refCacheVersion[set]=nextV;return null;},text:`cg-refdata-cache · ${set} cache v${nextV - 1} → v${nextV}`,explain:"The workbench's reference-data consumer refreshed its in-memory cache. No deployment and no code change."},
+   {id:"snow",act:()=>{W.snow.DIM_REFERENCE.push({SET:set,VERSION:nextV,CHANGE:type,ITEMS:W.ref[set].items.length,AT:new Date().toISOString()});return null;},text:"row → CYBER_DW.RAW.DIM_REFERENCE",explain:"Snowflake's reference dimension received the new version, so reports can label old and new codes."},
+   {id:"sr",act:()=>{renderForm();flashRef(set);return null;},text:`ReferenceDataChanged → ${set} v${nextV}`,explain:`SignalR told every open workbench that ${set} changed; dropdowns that use it re-rendered with the new list.`}]});
+}
+function flashRef(set){FIELDS.filter(f=>f.ref===set||(set==="REGION"&&f.id==="state")).forEach(f=>{const el=$("#fld-"+f.id);if(el){el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash");}});}
+
+/* ================================================================ workbench rendering */
+function typeTag(f,set){const isRef=!!f.ref;const cls=f.type==="derived"?"der":isRef?"ref":"";let t=TYPE_TAG[f.type]||f.type.toUpperCase();if(isRef&&f.type!=="money")t+=` · ${f.ref} v${W.ref[f.ref].version}`;if(f.type==="money")t=`MONEY · amount + CURRENCY v${W.ref.CURRENCY.version}`;return `<span class="ftype ${cls}">${esc(t)}</span>`;}
+function optionsFor(set,cur,filterFn){
+  const items=W.ref[set].items.filter(i=>(i.active||i.code===String(cur))&&(!filterFn||filterFn(i)));
+  return items.map(i=>`<option value="${esc(i.code)}" ${String(cur)===i.code?"selected":""}>${esc(i.label)}${i.active?"":" (retired)"}</option>`).join("");
+}
+function fieldHtml(f,s,ro){
+  const v=s.f[f.id];const dis=ro?"disabled":"";const id="f-"+f.id;
+  let input="";
+  switch(f.type){
+    case "text":case "masked": input=`<input id="${id}" value="${esc(v)}" ${f.hint?`placeholder="${f.hint}"`:""} ${dis}>`;break;
+    case "textarea": input=`<textarea id="${id}" ${dis}>${esc(v)}</textarea>`;break;
+    case "int":case "pct": input=`<input id="${id}" type="number" ${f.type==="pct"?'min="0" max="100" step="0.5"':'step="1"'} value="${esc(v)}" ${dis}>`;break;
+    case "date": input=`<input id="${id}" type="date" value="${esc(v)}" ${dis}>`;break;
+    case "ref": {const filt=f.dep?(i=>i.attrs.country===s.f[f.dep]):null;input=`<select id="${id}" ${dis}><option value="">— select —</option>${optionsFor(f.ref,v,filt)}</select>`;const x=refItem(f.ref,v);if(x&&!x.active)input+=`<span class="retired">Retired in ${f.ref} v${x.retiredIn}. Old events still show it; new selections can't use it.</span>`;break;}
+    case "typeahead": {const x=refItem(f.ref,v);input=`<input id="${id}" list="dl-${f.id}" value="${esc(x?`${x.code} · ${x.label}`:v)}" ${dis}><datalist id="dl-${f.id}">${W.ref[f.ref].items.filter(i=>i.active).map(i=>`<option value="${esc(i.code)} · ${esc(i.label)}"></option>`).join("")}</datalist>`;break;}
+    case "money": input=`<div class="money box"><select id="f-revenue-cur" ${dis}>${optionsFor("CURRENCY",v?.currency)}</select><input id="f-revenue-amt" type="number" step="1000000" value="${esc(v?.amount)}" ${dis}></div>`;break;
+    case "multi": input=`<div class="checks box">${W.ref[f.ref].items.filter(i=>i.active||(v||[]).includes(i.code)).map(i=>`<label><input type="checkbox" name="f-${f.id}" value="${esc(i.code)}" ${(v||[]).includes(i.code)?"checked":""} ${dis}>${esc(i.label)}</label>`).join("")}</div>`;break;
+    case "radio": input=`<div class="radios box">${W.ref[f.ref].items.filter(i=>i.active).map(i=>`<label><input type="radio" name="f-${f.id}" value="${esc(i.code)}" ${v===i.code?"checked":""} ${dis}>${esc(i.label)}</label>`).join("")}</div>`;break;
+    case "toggle": input=`<label class="switch box"><input id="${id}" type="checkbox" ${v?"checked":""} ${dis}> ${v?"Applies":"Does not apply"}</label>`;break;
+    case "derived": input=`<div class="ro" id="${id}">${esc(derived(s.f)[f.id])}</div>`;break;
+  }
+  return `<div class="fld ${f.full?"full":""}" id="fld-${f.id}"><div class="lab">${esc(f.label)}${f.req?'<span class="req">*</span>':""} ${typeTag(f)}</div>${input}<div class="fstat"></div></div>`;
+}
+function renderForm(){
+  const ro=!!W.tt; const s=ro?stateAt(W.tt):stateAt();
+  const sec=(id,title,inner,meta)=>`<div class="card"><h3>${esc(title)}<small>${meta||""}</small></h3>${inner}</div>`;
+  let h="";
+  for(const [sid,title] of SECTIONS){
+    if(sid==="incidents"){h+=sec(sid,title,incidentsHtml(s,ro),"GRID · rows → PriorIncidentAdded / Removed");continue;}
+    if(sid==="docs"){h+=sec(sid,title,docsHtml(s,ro),"UPLOAD → Blob Storage + DocumentAttached");continue;}
+    const fs=FIELDS.filter(f=>f.sec===sid);
+    let inner=`<div class="fgrid">${fs.map(f=>fieldHtml(f,s,ro)).join("")}</div>`;
+    if(sid==="assign") inner+=`<div style="margin-top:10px"><div class="lab" style="font-size:12.5px;color:var(--muted);display:flex;gap:6px;align-items:center">Notes <span class="ftype">TEXT · append-only → NoteAdded</span></div><div class="notes" id="notes"></div>${ro?"":`<div style="display:flex;gap:6px;margin-top:6px"><input id="noteIn" placeholder="Add a note for the file" style="flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:7px;padding:6px 8px"><button class="btn sm" id="noteBtn" type="button">Add note</button></div>`}</div>`;
+    const evs=[...new Set(fs.filter(f=>f.ev).map(f=>f.ev))].join(" · ");
+    h+=sec(sid,title,inner,evs?"→ "+evs:"");
+  }
+  $("#form").innerHTML=h;
+  if(!W.typesShown) $("#form").classList.add("hidetypes"); else $("#form").classList.remove("hidetypes");
+  renderNotes(s); bindForm(ro);
+  if(s.warnings.length) FIELDS.filter(f=>f.id==="country").forEach(()=>{fieldStatus("country","error",s.warnings[0]);});
+  renderTTBanner(); renderWorkbenchHead();
+}
+function incidentsHtml(s,ro){
+  return `<table class="gridtbl"><tr><th>Row</th><th>Date <span class="ftype">DATE</span></th><th>Type <span class="ftype ref">INCIDENT_TYPE v${W.ref.INCIDENT_TYPE.version}</span></th><th>Paid (USD) <span class="ftype">NUMBER</span></th><th></th></tr>
+   ${s.incidents.map(r=>`<tr><td class="mono">${esc(r.rowId)}</td><td class="mono">${esc(r.date)}</td><td>${esc(refLabel("INCIDENT_TYPE",r.type))}</td><td class="mono">${fmtMoney(r.amount,"USD")}</td><td>${ro?"":`<button class="btn sm" type="button" data-delinc="${esc(r.rowId)}">Remove</button>`}</td></tr>`).join("")||`<tr><td colspan="5" style="color:var(--muted)">No prior incidents recorded.</td></tr>`}
+   ${ro?"":`<tr><td class="mono" style="color:var(--faint)">new</td><td><input type="date" id="incDate" value="${addDays(today(),-400)}"></td><td><select id="incType">${optionsFor("INCIDENT_TYPE","BEC")}</select></td><td><input type="number" id="incAmt" value="85000" step="1000"></td><td><button class="btn sm" id="incAdd" type="button">Add row</button></td></tr>`}</table><div class="fstat" id="incStat"></div>`;
+}
+function docsHtml(s,ro){
+  return `<div style="display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:10px;align-items:start">
+   <table class="gridtbl"><tr><th>Document</th><th>Type <span class="ftype ref">DOC_TYPE v${W.ref.DOC_TYPE.version}</span></th><th>Size</th><th>Scan</th></tr>
+   ${s.documents.map(d=>`<tr><td><span class="mono" style="font-size:12px">${esc(d.docId)}</span> ${esc(d.fileName)}<br><small class="mono" style="color:var(--faint)">sha256 ${esc(String(d.sha256).slice(0,16))}…</small></td><td>${esc(refLabel("DOC_TYPE",d.docType))}</td><td class="mono">${(d.size/1024).toFixed(0)} KB</td><td><span class="chip ${d.scan==="pending"?"warn":"ok"}">${esc(d.scan)}</span></td></tr>`).join("")}</table>
+   ${ro?`<div class="note">Read-only in time travel.</div>`:`<div style="display:flex;flex-direction:column;gap:6px"><label class="lab" style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px">Document type<select id="docType" style="background:var(--panel-2);border:1px solid var(--line);border-radius:7px;padding:5px">${optionsFor("DOC_TYPE","APP")}</select></label>
+   <label class="drop" id="drop" tabindex="0">Drop a file here or click to choose<br><small>Max 25 MB · goes to Blob Storage</small><input type="file" id="fileIn" hidden></label></div>`}</div>`;
+}
+function renderIncidents(){const s=W.tt?stateAt(W.tt):stateAt();const c=[...document.querySelectorAll(".card")].find(x=>x.querySelector("h3")?.textContent.startsWith("Prior incidents"));if(c){c.querySelector("table")?.parentElement&&(c.innerHTML=`<h3>Prior incidents (grid)<small>GRID · rows → PriorIncidentAdded / Removed</small></h3>`+incidentsHtml(s,!!W.tt));bindGrid();}}
+function renderDocs(){const s=W.tt?stateAt(W.tt):stateAt();const c=[...document.querySelectorAll(".card")].find(x=>x.querySelector("h3")?.textContent.startsWith("Documents"));if(c){c.innerHTML=`<h3>Documents (upload)<small>UPLOAD → Blob Storage + DocumentAttached</small></h3>`+docsHtml(s,!!W.tt);bindDocs();}}
+function renderNotes(s){s=s||(W.tt?stateAt(W.tt):stateAt());const n=$("#notes");if(n)n.innerHTML=s.notes.map(x=>`<div>${esc(x.text)}<br><small>${esc(x.by)} · ${esc(x.at.slice(0,19).replace("T"," "))}</small></div>`).join("")||`<div style="color:var(--muted);border:0">No notes yet.</div>`;}
+function setFieldUI(id,v){
+  const f=FIELD[id];if(!f)return;
+  if(f.type==="money"){$("#f-revenue-cur").value=v.currency;$("#f-revenue-amt").value=v.amount;return;}
+  if(f.type==="multi"){document.querySelectorAll(`[name="f-${id}"]`).forEach(x=>x.checked=v.includes(x.value));return;}
+  if(f.type==="radio"){document.querySelectorAll(`[name="f-${id}"]`).forEach(x=>x.checked=x.value===v);return;}
+  if(f.type==="toggle"){$("#f-"+id).checked=!!v;return;}
+  if(f.type==="typeahead"){const x=refItem(f.ref,v);$("#f-"+id).value=x?`${x.code} · ${x.label}`:v;return;}
+  if(f.type==="derived")return;
+  if(f.dep){renderDependent(id);}
+  const el=$("#f-"+id);if(el&&document.activeElement!==el)el.value=v??"";
+}
+function renderDependent(id){const f=FIELD[id];const s=stateAt();const el=$("#f-"+id);if(el)el.innerHTML=`<option value="">— select —</option>`+optionsFor(f.ref,s.f[id],i=>i.attrs.country===s.f[f.dep]);}
+function refreshDerived(){const s=stateAt();const d=derived(s.f);FIELDS.filter(f=>f.type==="derived").forEach(f=>{const el=$("#f-"+f.id);if(el)el.textContent=d[f.id];});if(FIELD.state)renderDependent("state");const st=$("#f-state");if(st)st.value=s.f.state||"";}
+function bindForm(ro){
+  if(ro)return;
+  for(const f of FIELDS){
+    if(f.type==="derived")continue;
+    const fire=()=>submitChange(f.id,fieldValueFromUI(f.id));
+    if(f.type==="money"){$("#f-revenue-cur").addEventListener("change",fire);$("#f-revenue-amt").addEventListener("change",fire);continue;}
+    if(f.type==="multi"||f.type==="radio"){document.querySelectorAll(`[name="f-${f.id}"]`).forEach(x=>x.addEventListener("change",fire));continue;}
+    const el=$("#f-"+f.id); if(!el)continue;
+    el.addEventListener("change",fire);
+    if(f.type==="toggle") el.addEventListener("change",()=>{el.parentElement.lastChild.textContent=el.checked?" Applies":" Does not apply";});
+  }
+  bindGrid(); bindDocs();
+  const nb=$("#noteBtn"); if(nb) nb.onclick=()=>{const t=$("#noteIn").value;$("#noteIn").value="";addNote(t);};
+}
+function bindGrid(){const a=$("#incAdd");if(a)a.onclick=()=>addIncident({date:$("#incDate").value,type:$("#incType").value,amount:$("#incAmt").value});document.querySelectorAll("[data-delinc]").forEach(b=>b.onclick=()=>removeIncident(b.dataset.delinc));}
+function bindDocs(){const fi=$("#fileIn"),dr=$("#drop");if(!fi)return;fi.onchange=()=>{if(fi.files[0])uploadDoc(fi.files[0],$("#docType").value);fi.value="";};
+  dr.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();fi.click();}});
+  dr.addEventListener("dragover",e=>{e.preventDefault();dr.classList.add("over");});dr.addEventListener("dragleave",()=>dr.classList.remove("over"));
+  dr.addEventListener("drop",e=>{e.preventDefault();dr.classList.remove("over");const f=e.dataTransfer.files[0];if(f)uploadDoc(f,$("#docType").value);});}
+function renderWorkbenchHead(){
+  const s=stateAt();
+  $("#wbHead").innerHTML=`<h2>${esc(s.f.insuredName)}</h2><div class="ids"><span class="chip">Risk <b class="mono">${RISK}</b></span><span class="chip">Submission <b class="mono">${SUBM}</b></span><span class="chip">Cyber · Information Cyber</span><span class="chip ${(s.f.revenue?.usd||0)>50e6?"ok":"no"}">${(s.f.revenue?.usd||0)>50e6?"Middle Market":"Small Commercial"}</span><span class="chip">Stream version <b class="mono">v${s.version}</b></span>${s.warnings.length?`<span class="chip no">${esc(s.warnings[0])}</span>`:""}<span class="chip">Status <b>${esc(s.status)}</b></span></div>`;
+}
+function renderTTBanner(){$("#ttBanner").innerHTML=W.tt?`<div class="note warn tt-banner">Time travel: showing the workbench as it was at <b>version ${W.tt}</b> of ${streamVersion(RISK)}, rebuilt by replaying events 1–${W.tt}. Read-only. <button class="btn sm" id="ttLive" type="button">Back to live</button></div>`:"";const b=$("#ttLive");if(b)b.onclick=()=>{W.tt=null;renderForm();renderRight();};}
+function renderLog(){$("#logTbl").innerHTML=`<tr><td style="color:var(--muted)">time</td><td style="color:var(--muted)">event / command</td><td style="color:var(--muted)">ver</td><td style="color:var(--muted)">result</td></tr>`+[...W.log.map(x=>({...x,ok:true})),...W.rejected.map(x=>({at:x.at,cmd:x.command,v:"–",result:x.reason,ok:false}))].sort((a,b)=>a.at<b.at?1:-1).slice(0,40).map(x=>`<tr><td>${esc(x.at.slice(11,19))}</td><td>${esc(x.cmd)}</td><td>${esc(x.v)}</td><td style="color:${x.ok?"var(--good)":"var(--bad)"}">${esc(x.ok?"stored":"rejected: "+x.result)}</td></tr>`).join("");}
+
+/* ================================================================ right column */
+const TABS=[["stream","Event stream"],["proj","Projections"],["kafka","Kafka → Snowflake"],["ref","Reference data"],["tt","Time travel"],["blob","Blob storage"],["how","How it works"]];
+let tab="stream", refSetSel="CURRENCY", streamSel=RISK;
+function renderRight(){
+  const cnt={stream:riskEvents().length,proj:"",kafka:W.kafka.length,ref:Object.keys(W.ref).length,tt:"",blob:W.blobs.length,how:""};
+  $("#tabs").innerHTML=TABS.map(([id,l])=>`<button role="tab" type="button" data-t="${id}" aria-selected="${tab===id}">${l}<span class="cnt">${cnt[id]}</span></button>`).join("");
+  $("#tabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;renderRight();});
+  const B=$("#tbody");
+  if(tab==="stream"){
+    const streams=[RISK,...Object.keys(W.ref).map(s=>"refdata-"+s)];
+    const evs=W.mtEvents.filter(e=>e.stream_id===streamSel).slice().reverse();
+    const newest=W.mtEvents.at(-1)?.seq_id;
+    B.innerHTML=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 class="sec">cyber.mt_events</h3><select id="streamSel" style="background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:4px">${streams.map(s=>`<option ${s===streamSel?"selected":""}>${s}</option>`).join("")}</select><span class="chip">${evs.length} events · newest first</span></div>
+     <div class="note">Every change is a new row. Rows are never updated or deleted. The workbench's current state is the result of replaying these rows in version order.</div>
+     <div class="tw"><table class="dt"><tr><th>seq_id</th><th>version</th><th>type</th><th>user</th><th>timestamp</th><th>data</th></tr>${evs.map(e=>`<tr class="click ${e.seq_id===newest?"new":""} ${W.selectedEvent===e.seq_id?"sel":""}" data-seq="${e.seq_id}"><td>${e.seq_id}</td><td>${e.version}</td><td>${esc(e.type)}</td><td>${esc(e.user)}</td><td>${esc(e.timestamp.slice(11,19))}</td><td class="clip">${esc(JSON.stringify(e.data))}</td></tr>`).join("")}</table></div>
+     ${W.selectedEvent?`<pre class="code">${jhtml(W.mtEvents.find(e=>e.seq_id===W.selectedEvent))}</pre>`:`<div style="color:var(--muted);font-size:13px">Click a row to see the full event.</div>`}`;
+    $("#streamSel").onchange=e=>{streamSel=e.target.value;W.selectedEvent=null;renderRight();};
+    B.querySelectorAll("tr[data-seq]").forEach(tr=>tr.onclick=()=>{W.selectedEvent=+tr.dataset.seq;renderRight();});
+  } else if(tab==="proj"){
+    const s=stateAt();const snapDoc={id:RISK,mt_version:s.version,mt_last_modified:s.lastModified,data:{...s.f,incidents:s.incidents,documents:s.documents.map(d=>({docId:d.docId,docType:d.docType,fileName:d.fileName,scan:d.scan})),notes:s.notes.length,warnings:s.warnings,refVersions:s.refVersions}};
+    B.innerHTML=`<div class="note">Three read models are built from the same events. Each one is shaped for its reader and can be thrown away and rebuilt by replaying the stream.</div>
+     <div><h3 class="sec" style="margin-bottom:6px">1 · Workbench snapshot · cyber.mt_doc_flow_snapshot_projection (inline, same transaction)</h3>
+     <div style="font-size:12.5px;margin-bottom:6px">Last change: ${W.lastChangedKeys.length?W.lastChangedKeys.map(k=>`<span class="chip">${esc(k)}</span>`).join(" "):"—"} · Stores <b>codes</b> (e.g. currency "${esc(s.f.revenue?.currency)}") plus the reference version used; labels are looked up at read time.</div>
+     <pre class="code">${jhtml(snapDoc)}</pre></div>
+     <div><h3 class="sec" style="margin-bottom:6px">2 · Elasticsearch · risk-dashboard/_doc/${RISK} (async via outbox)</h3><pre class="code">${jhtml(W.es)}</pre></div>
+     <div><h3 class="sec" style="margin-bottom:6px">3 · Reference-data projection · ref_currency (one per list)</h3><pre class="code">${jhtml(W.ref.CURRENCY)}</pre></div>`;
+  } else if(tab==="kafka"){
+    const ks=W.kafka.slice().reverse();
+    B.innerHTML=`<div class="note">Topic <b class="mono">pc.risk.form.updated</b> (key = risk ID, 6 partitions, schema id 1071) carries every workbench change to other domains. <b class="mono">pc.refdata.changed</b> (key = list name, <b>log-compacted</b>, schema id 1102) carries the full latest version of each reference list.</div>
+     <div class="tw"><table class="dt"><tr><th>topic</th><th>P</th><th>offset</th><th>key</th><th>time</th><th>value</th></tr>${ks.map(r=>`<tr><td>${esc(r.topic)}</td><td>${r.partition}</td><td>${r.offset}</td><td>${esc(r.key)}</td><td>${esc(r.ts.slice(11,19))}</td><td class="clip">${esc(JSON.stringify(r.value))}</td></tr>`).join("")||`<tr><td colspan="6" style="color:var(--muted)">No records yet.</td></tr>`}</table></div>
+     ${ks[0]?`<details><summary class="sec" style="cursor:pointer">Latest record value</summary><pre class="code" style="margin-top:6px">${jhtml(ks[0].value)}</pre></details>`:""}
+     <h3 class="sec">Snowflake · CYBER_DW.RAW.RISK_FORM_EVENTS</h3><div class="tw" style="max-height:200px"><table class="dt"><tr><th>partition</th><th>offset</th><th>key</th><th>RECORD_CONTENT</th></tr>${W.snow.RISK_FORM_EVENTS.slice().reverse().map(r=>`<tr><td>${r.RECORD_METADATA.partition}</td><td>${r.RECORD_METADATA.offset}</td><td>${esc(r.RECORD_METADATA.key)}</td><td class="clip">${esc(JSON.stringify(r.RECORD_CONTENT))}</td></tr>`).join("")}</table></div>
+     <h3 class="sec">Snowflake · CYBER_DW.RAW.DIM_REFERENCE</h3><table class="dt"><tr><th>SET</th><th>VERSION</th><th>CHANGE</th><th>ITEMS</th><th>AT</th></tr>${W.snow.DIM_REFERENCE.slice().reverse().map(r=>`<tr><td>${esc(r.SET)}</td><td>${r.VERSION}</td><td>${esc(r.CHANGE)}</td><td>${r.ITEMS}</td><td>${esc(r.AT.slice(11,19))}</td></tr>`).join("")||`<tr><td colspan="5" style="color:var(--muted)">No reference changes yet.</td></tr>`}</table>`;
+  } else if(tab==="ref"){
+    const r=W.ref[refSetSel];const attrs=refSetSel==="CURRENCY"?["symbol","fxToUsd"]:refSetSel==="REGION"?["country"]:refSetSel==="NAICS"?["sic","hazard"]:[];
+    B.innerHTML=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 class="sec">Reference-data admin</h3><select id="refSel" style="background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:4px">${Object.keys(W.ref).map(s=>`<option value="${s}" ${s===refSetSel?"selected":""}>${s} · ${esc(W.ref[s].label)}</option>`).join("")}</select><span class="chip">version <b>v${r.version}</b></span><span class="chip">stream refdata-${refSetSel}</span><span class="chip">workbench cache v${W.refCacheVersion[refSetSel]}</span></div>
+     <div class="note">Adding a value never needs a code change or a deployment. The change is an event on the list's own stream, it is published to a compacted Kafka topic, caches refresh, and open screens update through SignalR. Values are <b>retired</b>, never deleted, so old events that used them still make sense.</div>
+     <div class="admin">${["code","label",...attrs].map(a=>`<label>${a}<input id="ra-${a}" ${a==="fxToUsd"?'type="number" step="0.0001"':""} placeholder="${a==="code"?"e.g. GBP":a==="label"?"e.g. British Pound":a==="country"?"e.g. GB":a==="fxToUsd"?"e.g. 1.27":""}"></label>`).join("")}<button class="btn primary" id="raAdd" type="button">Add to ${refSetSel}</button></div>
+     <div class="tw"><table class="dt"><tr><th>code</th><th>label</th>${attrs.map(a=>`<th>${a}</th>`).join("")}<th>since</th><th>status</th><th></th></tr>${r.items.map(i=>`<tr><td>${esc(i.code)}</td><td>${esc(i.label)}</td>${attrs.map(a=>`<td>${esc(i.attrs[a]??"")}</td>`).join("")}<td>v${i.since}</td><td>${i.active?`<span class="chip ok">active</span>`:`<span class="chip warn">retired v${i.retiredIn}</span>`}</td><td><button class="btn sm" type="button" data-rt="${esc(i.code)}">${i.active?"Retire":"Reactivate"}</button></td></tr>`).join("")}</table></div>`;
+    $("#refSel").onchange=e=>{refSetSel=e.target.value;renderRight();};
+    $("#raAdd").onclick=()=>{const item={code:$("#ra-code").value.trim().toUpperCase(),label:$("#ra-label").value.trim(),attrs:{}};attrs.forEach(a=>{const v=$("#ra-"+a).value.trim();item.attrs[a]=a==="fxToUsd"?Number(v)||1:a==="country"?v.toUpperCase():v;});refChange(refSetSel,"add",{items:[item]});};
+    B.querySelectorAll("[data-rt]").forEach(b=>b.onclick=()=>{const it=refItem(refSetSel,b.dataset.rt);refChange(refSetSel,it.active?"retire":"reactivate",{code:it.code});});
+  } else if(tab==="tt"){
+    const max=streamVersion(RISK);const v=W.ttSel||max;const past=stateAt(v),now=stateAt();
+    const keys=[...new Set([...Object.keys(past.f),...Object.keys(now.f)])].filter(k=>JSON.stringify(past.f[k])!==JSON.stringify(now.f[k]));
+    const evs=riskEvents().filter(e=>e.version<=v).slice(-6).reverse();
+    B.innerHTML=`<h3 class="sec">Rebuild the risk at any version</h3>
+     <div class="note">Because nothing is overwritten, the state at any moment can be rebuilt by replaying events 1 to N. This is how audits, "what did the underwriter see when they quoted?" and bug investigations are answered.</div>
+     <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">Version <b class="mono" id="ttV">v${v} of ${max}</b><input type="range" id="ttRange" min="1" max="${max}" value="${v}"></label>
+     <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="ttShow" type="button">Show the workbench at v${v}</button>${W.tt?`<button class="btn" id="ttBack" type="button">Back to live</button>`:""}</div>
+     <h3 class="sec">Fields that differ from now (${keys.length})</h3><div class="diff"><div style="color:var(--muted)"><span>field</span><span>at v${v}</span><span>now (v${max})</span></div>${keys.map(k=>`<div><span>${esc(k)}</span><span class="a">${esc(JSON.stringify(past.f[k]))}</span><span class="b">${esc(JSON.stringify(now.f[k]))}</span></div>`).join("")||`<div><span>—</span><span>no differences</span><span></span></div>`}
+     ${past.incidents.length!==now.incidents.length?`<div><span>incidents</span><span class="a">${past.incidents.length} rows</span><span class="b">${now.incidents.length} rows</span></div>`:""}${past.documents.length!==now.documents.length?`<div><span>documents</span><span class="a">${past.documents.length}</span><span class="b">${now.documents.length}</span></div>`:""}</div>
+     <h3 class="sec">Last events up to v${v}</h3><table class="dt"><tr><th>v</th><th>type</th><th>user</th><th>data</th></tr>${evs.map(e=>`<tr><td>${e.version}</td><td>${esc(e.type)}</td><td>${esc(e.user)}</td><td class="clip">${esc(JSON.stringify(e.data))}</td></tr>`).join("")}</table>`;
+    $("#ttRange").oninput=e=>{W.ttSel=+e.target.value;renderRight();};
+    $("#ttShow").onclick=()=>{W.tt=v;renderForm();renderRight();};
+    const bb=$("#ttBack");if(bb)bb.onclick=()=>{W.tt=null;W.ttSel=null;renderForm();renderRight();};
+  } else if(tab==="blob"){
+    B.innerHTML=`<div class="note">Files go to <b class="mono">stcyberdocs/risk-docs/${RISK}/</b> through a short-lived SAS URL. Containers are immutable for 7 years. Only metadata and the SHA-256 hash go into the event, so the event store stays small and the hash proves the file was never changed.</div>
+     <table class="dt"><tr><th>docId</th><th>file</th><th>bytes</th><th>sha256</th><th>scan</th><th>blob URI</th></tr>${[{docId:"DOC-0001",fileName:"Harborline_submission_email.pdf",size:184220,sha256:"9b1c…e04a",scan:"No threats found",blobUri:`https://stcyberdocs.blob.core.windows.net/risk-docs/${RISK}/DOC-0001.pdf`},...W.blobs].map(b=>`<tr><td>${esc(b.docId)}</td><td>${esc(b.fileName)}</td><td>${(+b.size).toLocaleString()}</td><td class="clip">${esc(b.sha256)}</td><td>${esc(b.scan)}</td><td class="clip">${esc(b.blobUri)}</td></tr>`).join("")}</table>`;
+  } else if(tab==="how"){
+    B.innerHTML=`<h3 class="sec">One field change, end to end</h3>
+     <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:13.5px">
+      <li><b>Field → command.</b> The browser never writes data. It sends a command (UpdateInsuredDetails, ReportRevenue, AttachDocument…) with the new value, the reference-list version it picked from, and the stream version it was showing.</li>
+      <li><b>202 Accepted.</b> The Web API queues the command on Service Bus (session = risk ID) and replies at once.</li>
+      <li><b>Validate, then emit an event.</b> The Lifecycle Manager form plugin checks the rules and the current reference data. Valid → a past-tense event (InsuredDetailsChanged). Invalid → no event; SignalR sends ValidationFailed to the field.</li>
+      <li><b>Append, with optimistic concurrency.</b> Marten appends the event to mt_events only if the stream is still at the expected version. Otherwise a ConcurrencyConflict is raised (unless the change doesn't overlap).</li>
+      <li><b>Projections.</b> The snapshot document is updated in the same transaction. The outbox daemon then updates Elasticsearch, publishes to Kafka (→ Snowflake) and pushes SignalR to the browser.</li></ol>
+     <h3 class="sec">Field types and how they are stored</h3>
+     <table class="dt"><tr><th>UI field type</th><th>Stored in the event as</th><th>Example event</th></tr>
+      <tr><td>Text / multi-line / masked</td><td>string, from → to</td><td>InsuredDetailsChanged</td></tr>
+      <tr><td>Number / percent</td><td>number</td><td>ExposureUpdated</td></tr>
+      <tr><td>Date</td><td>ISO date; derived dates stored too</td><td>PolicyTermChanged</td></tr>
+      <tr><td>Reference drop-down / radio / type-ahead</td><td><b>code</b> + refSet + refVersion (never the label)</td><td>BrokerOfRecordChanged</td></tr>
+      <tr><td>Dependent reference (state by country)</td><td>both codes; parent change clears an invalid child</td><td>InsuredAddressChanged</td></tr>
+      <tr><td>Multi-select</td><td>array of codes</td><td>CoveragesSelected</td></tr>
+      <tr><td>Money</td><td>amount + currency code + FX rate + USD value at that moment</td><td>RevenueReported</td></tr>
+      <tr><td>Toggle</td><td>boolean</td><td>CoverageTermsChanged</td></tr>
+      <tr><td>Grid / repeating rows</td><td>one event per row added or removed, with a row ID</td><td>PriorIncidentAdded</td></tr>
+      <tr><td>File upload</td><td>metadata + SHA-256 + blob URI; scan result as a later event</td><td>DocumentAttached, DocumentScanned</td></tr>
+      <tr><td>Notes</td><td>append-only text</td><td>NoteAdded</td></tr>
+      <tr><td>Derived (SIC, segment, expiry)</td><td>computed by the read model, or stored when the inputs could change later (FX)</td><td>—</td></tr></table>
+     <h3 class="sec">Changing reference data</h3>
+     <ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:5px;font-size:13.5px">
+      <li>Each list (CURRENCY, REGION, …) is its own event stream with a version number. Adding GBP creates <span class="mono">ReferenceItemsAdded</span> as v2.</li>
+      <li>The new list is published to the compacted topic <span class="mono">pc.refdata.changed</span>. Every service's cache refreshes, and SignalR tells open screens to re-render the drop-down.</li>
+      <li>Risk events store the code and the list version, so a 2026 event that says <span class="mono">GBP @ CURRENCY v2</span> is still meaningful in 2033.</li>
+      <li>Values are retired, not deleted. Existing risks keep showing them (marked retired) and new selections are blocked by validation.</li>
+      <li>Values that affect money (FX rates) are copied into the event at the time of the change, so later rate updates don't silently change old premiums.</li>
+      <li>A whole new list, such as UK regions, is just new items with a different parent (country = GB). The form filters the child list by the parent's code.</li></ul>`;
+  }
+}
+
+/* ================================================================ guided demo */
+let demoRunning=false;
+function setFieldVisual(id,v){if(W.tt){W.tt=null;renderForm();}setFieldUI(id,v);const el=$("#fld-"+id);if(el){el.scrollIntoView({behavior:reduceMotion?"auto":"smooth",block:"center"});}}
+async function act(id,v){setFieldVisual(id,v);await sleep(300*pace);await submitChange(id,v);}
+async function demo(){
+  if(demoRunning){demoRunning=false;$("#demoBtn").textContent="▶ Play guided demo";speakTok++;if(synth)synth.cancel();return;}
+  demoRunning=true;$("#demoBtn").textContent="■ Stop demo";
+  const D=[
+   async()=>say("This is the underwriter workbench for Northwind Regional Medical Center. Every field on the left shows its type, and every change you make travels through the event pipeline in the middle. On the right is everything that gets stored. Let's start with a simple text field."),
+   async()=>{await say("I'll change the trading name. The browser sends an Update Insured Details command, the Web API answers 202 straight away, and the Lifecycle Manager turns it into an Insured Details Changed event.");await act("dba","Northwind Health System");},
+   async()=>say("That event is now version "+streamVersion(RISK)+" of the risk's stream in the m t events table. The snapshot, Elasticsearch, Kafka and Snowflake were all updated from it, and SignalR turned the field green."),
+   async()=>{await say("Next, a number field. Employees goes from 2,850 to 3,100. It becomes an Exposure Updated event.");await act("employees",3100);},
+   async()=>{await say("A date field. Changing the effective date also records the derived expiration date in the same event, so both stay in step.");await act("effectiveDate",addDays(today(),45));},
+   async()=>{await say("A reference drop-down. Picking a different broker stores the broker's code, not its name, together with the version of the broker list it came from.");await act("broker","PRD-31177");},
+   async()=>{await say("A multi-select. Adding social engineering fraud and media liability stores the full array of coverage codes.");await act("coverages",["BRE","NSL","PRL","REG","BI","CYX","SEF","MED"]);},
+   async()=>{await say("A radio button. Offline backups changes from No to Yes, which is a Security Control Answered event.");await act("backups","Y");},
+   async()=>{await say("A grid. Adding a row for a prior business email compromise creates a Prior Incident Added event with its own row I D. Removing a row would be a separate event; nothing is ever edited in place.");$("#incType")&&($("#incType").value="BEC");await addIncident({date:addDays(today(),-420),type:"BEC",amount:85000});},
+   async()=>{await say("Now an upload. The file goes straight to Azure Blob Storage through a short-lived link. Only its metadata and SHA-256 hash become an event. A few seconds later the malware scan result arrives as a second event.");const f=new File([`%PDF-1.7\n% Sample signed cyber application for ${RISK}\n`.repeat(400)],"Northwind_Signed_Application.pdf",{type:"application/pdf"});await uploadDoc(f,"APP");},
+   async()=>{await say("Now, reference data. The currency list only has US dollars. An administrator adds British pounds, with an exchange rate to U S D. Watch: no code change, no deployment. It's an event on the currency list's own stream, published to a compacted Kafka topic, and the currency drop-down refreshes through SignalR.");tab="ref";refSetSel="CURRENCY";renderRight();await refChange("CURRENCY","add",{items:[{code:"GBP",label:"British Pound",attrs:{symbol:"£",fxToUsd:1.27}}]});},
+   async()=>{await say("The broker now reports revenue in pounds: 330 million. The event stores the amount, the currency code, the exchange rate used and the U S dollar value at that moment. That's why the segment is still Middle Market, and why a later rate change can't silently rewrite history.");tab="proj";renderRight();await act("revenue",{amount:330000000,currency:"GBP"});},
+   async()=>{await say("Next, a new list. The region list only has U S states. The administrator adds the United Kingdom as a country, then its four nations as regions under it.");tab="ref";refSetSel="COUNTRY";renderRight();await refChange("COUNTRY","add",{items:[{code:"GB",label:"United Kingdom",attrs:{}}]});refSetSel="REGION";renderRight();await refChange("REGION","add",{items:[{code:"ENG",label:"England",attrs:{country:"GB"}},{code:"SCT",label:"Scotland",attrs:{country:"GB"}},{code:"WLS",label:"Wales",attrs:{country:"GB"}},{code:"NIR",label:"Northern Ireland",attrs:{country:"GB"}}]});},
+   async()=>{await say("If the country is switched to the United Kingdom, the state list is filtered to the U K regions, Ohio is cleared because it isn't a U K region, and appetite validation raises a warning: this product is for U S risks only.");await act("country","GB");},
+   async()=>{await say("Switching back to the United States clears the warning, and Ohio is selected again.");await act("country","US");await act("state","OH");},
+   async()=>{await say("Now a late validation error. I'll type a negative number of employees. Watch the Web API still answer 202 Accepted. The rejection only comes back afterwards, through SignalR. Nothing is written to the event store.");await act("employees",-5);},
+   async()=>{await say("Now two people edit the same field at once. A colleague changes the limit to 3 million while my change to 10 million is still queued with the old version number. The first wins. Mine fails Marten's optimistic concurrency check, and the screen tells me who changed it.");const v=streamVersion(RISK);const p1=submitChange("limit","3000000",{user:"uw.pshah",expectedVersion:v});setFieldVisual("limit","10000000");const p2=submitChange("limit","10000000",{expectedVersion:v});await p1;await p2;},
+   async()=>{await say("Retiring a value. The administrator retires the 10 million limit. Existing risks that used it still show it, marked retired, but nobody can pick it for a new change.");tab="ref";refSetSel="LIMIT";renderRight();await refChange("LIMIT","retire",{code:"10000000"});},
+   async()=>{const v=4;await say(`Finally, time travel. Because nothing was ever overwritten, I can rebuild the workbench exactly as it was at version ${v}, by replaying the first ${v} events.`);tab="tt";W.ttSel=v;renderRight();W.tt=v;renderForm();renderRight();$("#form").scrollIntoView({behavior:"smooth"});},
+   async()=>{await say("That's the whole pattern. Every field becomes a command, then an event, then a set of projections. Reference data is versioned the same way, so new currencies, new regions and retired values never break old records. Press Back to live to return to the current version.");}];
+  for(const step of D){ if(!demoRunning)break; await step(); await sleep(500*pace); }
+  demoRunning=false;$("#demoBtn").textContent="▶ Play guided demo";
+}
+
+/* ================================================================ init */
+function boot(){
+  newWorld(); W.typesShown=W.typesShown??true;
+  renderStages(); renderForm(); renderRight(); renderLog();
+}
+function init(){
+  boot();
+  $("#demoBtn").onclick=demo;
+  $("#voiceBtn").onclick=()=>{voiceOn=!voiceOn;$("#voiceBtn").classList.toggle("on",voiceOn);$("#voiceBtn").setAttribute("aria-pressed",voiceOn);$("#voiceBtn").textContent=voiceOn?"🔊 Voice on":"🔇 Voice off";if(!voiceOn&&synth)synth.cancel();};
+  if(!synth){voiceOn=false;$("#voiceBtn").textContent="Captions only";$("#voiceBtn").disabled=true;}
+  $("#paceSel").onchange=e=>{pace=+e.target.value;};
+  $("#typesBtn").onclick=()=>{W.typesShown=!W.typesShown;$("#typesBtn").textContent="Field types: "+(W.typesShown?"shown":"hidden");$("#form").classList.toggle("hidetypes",!W.typesShown);};
+  $("#resetBtn").onclick=()=>{demoRunning=false;speakTok++;if(synth)synth.cancel();const shown=W.typesShown;queue.length=0;boot();W.typesShown=shown;renderForm();$("#explain").innerHTML="<li>Lab reset.</li>";$("#cmdJson").textContent="—";$("#evJson").textContent="—";};
+  const themes=["system","light","dark"];let ti=0;try{ti=Math.max(0,themes.indexOf(localStorage.getItem("wb-theme")||"system"));}catch(e){}
+  const applyTheme=()=>{const t=themes[ti];if(t==="system")document.documentElement.removeAttribute("data-theme");else document.documentElement.setAttribute("data-theme",t);$("#themeBtn").textContent="Theme: "+t;try{localStorage.setItem("wb-theme",t);}catch(e){}};
+  $("#themeBtn").onclick=()=>{ti=(ti+1)%3;applyTheme();};applyTheme();
+}
+init();
+</script>
