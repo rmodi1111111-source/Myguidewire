@@ -66,6 +66,8 @@ pre.code{margin:0;background:var(--sunk);border:1px solid var(--line);border-rad
 
 /* --- narrator bar --- */
 .narrator{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px 16px}
+.narrator{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;box-shadow:0 6px 18px -10px rgba(0,0,0,.35)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:21;background:var(--bg)}
 .narrator .live{width:10px;height:10px;border-radius:50%;background:var(--faint)}
 .narrator .live.on{background:var(--bad);animation:blink 1s infinite}
 @keyframes blink{50%{opacity:.25}}
@@ -189,9 +191,13 @@ input[type=range]{width:100%}
 
   <section class="panel narrator" aria-label="Narrator">
     <span class="live" id="live"></span>
-    <p id="narr">Edit any field on the workbench and watch it travel through the architecture. Or press <b>Play guided demo</b> for a narrated walkthrough of every field type, reference data changes, a late validation error, a concurrent edit and time travel.</p>
+    <p id="narr">Edit any field on the workbench and watch it travel through the architecture. Or use <b>Start / Next ▶</b> to go through the guided demo one step at a time (◀ Previous goes back), or <b>Play all</b> for the whole narrated walkthrough of every field type, reference data changes, a late validation error, a concurrent edit and time travel.</p>
     <div class="ctl">
-      <button class="btn primary" id="demoBtn" type="button">▶ Play guided demo</button>
+      <button class="btn" id="demoPrev" type="button">◀ Previous</button>
+      <button class="btn primary" id="demoNext" type="button">Start ▶</button>
+      <button class="btn" id="demoBtn" type="button">▶ Play all</button>
+      <label>Step <select id="demoSel"></select></label>
+      <span class="mono" id="demoCtr" style="font-size:12.5px;color:var(--muted);flex-basis:100%"></span>
       <button class="btn on" id="voiceBtn" type="button" aria-pressed="true">🔊 Voice on</button>
       <label>Voice <select id="voiceSel"><option value="">Default</option></select></label>
       <label>Pace <select id="paceSel"><option value="1.6">Slow</option><option value="1" selected>Normal</option><option value="0.5">Fast</option></select></label>
@@ -371,6 +377,7 @@ let voiceOn=!!synth, voices=[], pace=1, speakTok=0;
 function loadVoices(){if(!synth)return;voices=synth.getVoices().filter(v=>/^en/i.test(v.lang));const sel=$("#voiceSel"),cur=sel.value;sel.innerHTML=`<option value="">Default</option>`+voices.map(v=>`<option value="${esc(v.name)}">${esc(v.name)}</option>`).join("");sel.value=cur;}
 if(synth){loadVoices();synth.onvoiceschanged=loadVoices;}
 function say(text){ // shows text and (optionally) speaks it; resolves when done
+  if(quiet){$("#narr").textContent=text;return Promise.resolve();}
   $("#narr").textContent=text; const tok=++speakTok; const words=text.split(/\s+/).length;
   const est=Math.max(2500,words*360)*pace;
   return new Promise(res=>{
@@ -403,7 +410,7 @@ let busy=false; const queue=[];
 function enqueue(job){return new Promise(res=>{queue.push({job,res});renderSbQueue();if(!busy)pump();});}
 async function pump(){busy=true;while(queue.length){const {job,res}=queue.shift();renderSbQueue();try{res(await runJob(job));}catch(e){console.error(e);res(null);}}busy=false;$("#pipeSub").textContent="idle";}
 function renderSbQueue(){const q=$("#sbq");if(q)q.innerHTML=queue.map(x=>`<span>${esc(x.job.label)}</span>`).join("")+(queue.length?`<span style="border:0">${queue.length} waiting in session order</span>`:"");}
-const stepMs=()=>reduceMotion?0:Math.round(480*pace);
+const stepMs=()=>(reduceMotion||quiet)?0:Math.round(480*pace);
 async function runJob(job){
   // job: {label, stages:[{id, text, fail?, act?}], explain:[...], cmd, events}
   $("#pipeSub").textContent=job.label;
@@ -776,39 +783,64 @@ function renderRight(){
   }
 }
 
-/* ================================================================ guided demo */
-let demoRunning=false;
-function setFieldVisual(id,v){if(W.tt){W.tt=null;renderForm();}setFieldUI(id,v);const el=$("#fld-"+id);if(el){el.scrollIntoView({behavior:reduceMotion?"auto":"smooth",block:"center"});}}
-async function act(id,v){setFieldVisual(id,v);await sleep(300*pace);await submitChange(id,v);}
-async function demo(){
-  if(demoRunning){demoRunning=false;$("#demoBtn").textContent="▶ Play guided demo";speakTok++;if(synth)synth.cancel();return;}
-  demoRunning=true;$("#demoBtn").textContent="■ Stop demo";
-  const D=[
-   async()=>say("This is the underwriter workbench for Northwind Regional Medical Center. Every field on the left shows its type, and every change you make travels through the event pipeline in the middle. On the right is everything that gets stored. Let's start with a simple text field."),
-   async()=>{await say("I'll change the trading name. The browser sends an Update Insured Details command, the Web API answers 202 straight away, and the Lifecycle Manager turns it into an Insured Details Changed event.");await act("dba","Northwind Health System");},
-   async()=>say("That event is now version "+streamVersion(RISK)+" of the risk's stream in the m t events table. The snapshot, Elasticsearch, Kafka and Snowflake were all updated from it, and SignalR turned the field green."),
-   async()=>{await say("Next, a number field. Employees goes from 2,850 to 3,100. It becomes an Exposure Updated event.");await act("employees",3100);},
-   async()=>{await say("A date field. Changing the effective date also records the derived expiration date in the same event, so both stay in step.");await act("effectiveDate",addDays(today(),45));},
-   async()=>{await say("A reference drop-down. Picking a different broker stores the broker's code, not its name, together with the version of the broker list it came from.");await act("broker","PRD-31177");},
-   async()=>{await say("A multi-select. Adding social engineering fraud and media liability stores the full array of coverage codes.");await act("coverages",["BRE","NSL","PRL","REG","BI","CYX","SEF","MED"]);},
-   async()=>{await say("A radio button. Offline backups changes from No to Yes, which is a Security Control Answered event.");await act("backups","Y");},
-   async()=>{await say("A grid. Adding a row for a prior business email compromise creates a Prior Incident Added event with its own row I D. Removing a row would be a separate event; nothing is ever edited in place.");$("#incType")&&($("#incType").value="BEC");await addIncident({date:addDays(today(),-420),type:"BEC",amount:85000});},
-   async()=>{await say("Now an upload. The file goes straight to Azure Blob Storage through a short-lived link. Only its metadata and SHA-256 hash become an event. A few seconds later the malware scan result arrives as a second event.");const f=new File([`%PDF-1.7\n% Sample signed cyber application for ${RISK}\n`.repeat(400)],"Northwind_Signed_Application.pdf",{type:"application/pdf"});await uploadDoc(f,"APP");},
-   async()=>{await say("Now, reference data. The currency list only has US dollars. An administrator adds British pounds, with an exchange rate to U S D. Watch: no code change, no deployment. It's an event on the currency list's own stream, published to a compacted Kafka topic, and the currency drop-down refreshes through SignalR.");tab="ref";refSetSel="CURRENCY";renderRight();await refChange("CURRENCY","add",{items:[{code:"GBP",label:"British Pound",attrs:{symbol:"£",fxToUsd:1.27}}]});},
-   async()=>{await say("The broker now reports revenue in pounds: 330 million. The event stores the amount, the currency code, the exchange rate used and the U S dollar value at that moment. That's why the segment is still Middle Market, and why a later rate change can't silently rewrite history.");tab="proj";renderRight();await act("revenue",{amount:330000000,currency:"GBP"});},
-   async()=>{await say("Next, a new list. The region list only has U S states. The administrator adds the United Kingdom as a country, then its four nations as regions under it.");tab="ref";refSetSel="COUNTRY";renderRight();await refChange("COUNTRY","add",{items:[{code:"GB",label:"United Kingdom",attrs:{}}]});refSetSel="REGION";renderRight();await refChange("REGION","add",{items:[{code:"ENG",label:"England",attrs:{country:"GB"}},{code:"SCT",label:"Scotland",attrs:{country:"GB"}},{code:"WLS",label:"Wales",attrs:{country:"GB"}},{code:"NIR",label:"Northern Ireland",attrs:{country:"GB"}}]});},
-   async()=>{await say("If the country is switched to the United Kingdom, the state list is filtered to the U K regions, Ohio is cleared because it isn't a U K region, and appetite validation raises a warning: this product is for U S risks only.");await act("country","GB");},
-   async()=>{await say("Switching back to the United States clears the warning, and Ohio is selected again.");await act("country","US");await act("state","OH");},
-   async()=>{await say("Now a late validation error. I'll type a negative number of employees. Watch the Web API still answer 202 Accepted. The rejection only comes back afterwards, through SignalR. Nothing is written to the event store.");await act("employees",-5);},
-   async()=>{await say("Now two people edit the same field at once. A colleague changes the limit to 3 million while my change to 10 million is still queued with the old version number. The first wins. Mine fails Marten's optimistic concurrency check, and the screen tells me who changed it.");const v=streamVersion(RISK);const p1=submitChange("limit","3000000",{user:"uw.pshah",expectedVersion:v});setFieldVisual("limit","10000000");const p2=submitChange("limit","10000000",{expectedVersion:v});await p1;await p2;},
-   async()=>{await say("Retiring a value. The administrator retires the 10 million limit. Existing risks that used it still show it, marked retired, but nobody can pick it for a new change.");tab="ref";refSetSel="LIMIT";renderRight();await refChange("LIMIT","retire",{code:"10000000"});},
-   async()=>{const v=4;await say(`Finally, time travel. Because nothing was ever overwritten, I can rebuild the workbench exactly as it was at version ${v}, by replaying the first ${v} events.`);tab="tt";W.ttSel=v;renderRight();W.tt=v;renderForm();renderRight();$("#form").scrollIntoView({behavior:"smooth"});},
-   async()=>{await say("That's the whole pattern. Every field becomes a command, then an event, then a set of projections. Reference data is versioned the same way, so new currencies, new regions and retired values never break old records. Press Back to live to return to the current version.");}];
-  for(const step of D){ if(!demoRunning)break; await step(); await sleep(500*pace); }
-  demoRunning=false;$("#demoBtn").textContent="▶ Play guided demo";
+/* ================================================================ guided demo (step by step) */
+let demoRunning=false, demoBusy=false, demoIdx=0, quiet=false;
+const wait=ms=>sleep(quiet?0:ms);
+function setFieldVisual(id,v){if(W.tt){W.tt=null;renderForm();}setFieldUI(id,v);const el=$("#fld-"+id);if(el&&!quiet){el.scrollIntoView({behavior:reduceMotion?"auto":"smooth",block:"center"});}}
+async function act(id,v){setFieldVisual(id,v);await wait(300*pace);await submitChange(id,v);}
+const DEMO=[
+ {t:"Introduction",run:async()=>say("This is the underwriter workbench for Northwind Regional Medical Center. Every field on the left shows its type, and every change you make travels through the event pipeline in the middle. On the right is everything that gets stored. Let's start with a simple text field.")},
+ {t:"Text field → InsuredDetailsChanged",run:async()=>{await say("I'll change the trading name. The browser sends an Update Insured Details command, the Web API answers 202 straight away, and the Lifecycle Manager turns it into an Insured Details Changed event.");await act("dba","Northwind Health System");await say("That event is now version "+streamVersion(RISK)+" of the risk's stream in the m t events table. The snapshot, Elasticsearch, Kafka and Snowflake were all updated from it, and SignalR turned the field green.");}},
+ {t:"Number field → ExposureUpdated",run:async()=>{await say("Next, a number field. Employees goes from 2,850 to 3,100. It becomes an Exposure Updated event.");await act("employees",3100);}},
+ {t:"Date field → PolicyTermChanged",run:async()=>{await say("A date field. Changing the effective date also records the derived expiration date in the same event, so both stay in step.");await act("effectiveDate",addDays(today(),45));}},
+ {t:"Reference drop-down → BrokerOfRecordChanged",run:async()=>{await say("A reference drop-down. Picking a different broker stores the broker's code, not its name, together with the version of the broker list it came from.");await act("broker","PRD-31177");}},
+ {t:"Multi-select → CoveragesSelected",run:async()=>{await say("A multi-select. Adding social engineering fraud and media liability stores the full array of coverage codes.");await act("coverages",["BRE","NSL","PRL","REG","BI","CYX","SEF","MED"]);}},
+ {t:"Radio button → SecurityControlAnswered",run:async()=>{await say("A radio button. Offline backups changes from No to Yes, which is a Security Control Answered event.");await act("backups","Y");}},
+ {t:"Grid row → PriorIncidentAdded",run:async()=>{await say("A grid. Adding a row for a prior business email compromise creates a Prior Incident Added event with its own row I D. Removing a row would be a separate event; nothing is ever edited in place.");await addIncident({date:addDays(today(),-420),type:"BEC",amount:85000});}},
+ {t:"File upload → Blob + DocumentAttached",run:async()=>{await say("Now an upload. The file goes straight to Azure Blob Storage through a short-lived link. Only its metadata and SHA-256 hash become an event. A few seconds later the malware scan result arrives as a second event.");const f=new File([`%PDF-1.7\n% Sample signed cyber application for ${RISK}\n`.repeat(400)],"Northwind_Signed_Application.pdf",{type:"application/pdf"});await uploadDoc(f,"APP");}},
+ {t:"Reference data: add GBP",run:async()=>{await say("Now, reference data. The currency list only has US dollars. An administrator adds British pounds, with an exchange rate to U S D. Watch: no code change, no deployment. It's an event on the currency list's own stream, published to a compacted Kafka topic, and the currency drop-down refreshes through SignalR.");tab="ref";refSetSel="CURRENCY";renderRight();await refChange("CURRENCY","add",{items:[{code:"GBP",label:"British Pound",attrs:{symbol:"£",fxToUsd:1.27}}]});}},
+ {t:"Money field in GBP → RevenueReported",run:async()=>{await say("The broker now reports revenue in pounds: 330 million. The event stores the amount, the currency code, the exchange rate used and the U S dollar value at that moment. That's why the segment is still Middle Market, and why a later rate change can't silently rewrite history.");tab="proj";renderRight();await act("revenue",{amount:330000000,currency:"GBP"});}},
+ {t:"Reference data: new country + region list",run:async()=>{await say("Next, a new list. The region list only has U S states. The administrator adds the United Kingdom as a country, then its four nations as regions under it.");tab="ref";refSetSel="COUNTRY";renderRight();await refChange("COUNTRY","add",{items:[{code:"GB",label:"United Kingdom",attrs:{}}]});refSetSel="REGION";renderRight();await refChange("REGION","add",{items:[{code:"ENG",label:"England",attrs:{country:"GB"}},{code:"SCT",label:"Scotland",attrs:{country:"GB"}},{code:"WLS",label:"Wales",attrs:{country:"GB"}},{code:"NIR",label:"Northern Ireland",attrs:{country:"GB"}}]});}},
+ {t:"Dependent list: country → regions, appetite warning",run:async()=>{await say("If the country is switched to the United Kingdom, the state list is filtered to the U K regions, Ohio is cleared because it isn't a U K region, and appetite validation raises a warning: this product is for U S risks only.");await act("country","GB");}},
+ {t:"Back to US: warning cleared",run:async()=>{await say("Switching back to the United States clears the warning, and Ohio is selected again.");await act("country","US");await act("state","OH");}},
+ {t:"Late validation error (202, then rejected)",run:async()=>{await say("Now a late validation error. I'll type a negative number of employees. Watch the Web API still answer 202 Accepted. The rejection only comes back afterwards, through SignalR. Nothing is written to the event store.");await act("employees",-5);}},
+ {t:"Concurrent edit → ConcurrencyConflict",run:async()=>{await say("Now two people edit the same field at once. A colleague changes the limit to 3 million while my change to 10 million is still queued with the old version number. The first wins. Mine fails Marten's optimistic concurrency check, and the screen tells me who changed it.");const v=streamVersion(RISK);const p1=submitChange("limit","3000000",{user:"uw.pshah",expectedVersion:v});setFieldVisual("limit","10000000");const p2=submitChange("limit","10000000",{expectedVersion:v});await p1;await p2;}},
+ {t:"Reference data: retire a value",run:async()=>{await say("Retiring a value. The administrator retires the 10 million limit. Existing risks that used it still show it, marked retired, but nobody can pick it for a new change.");tab="ref";refSetSel="LIMIT";renderRight();await refChange("LIMIT","retire",{code:"10000000"});}},
+ {t:"Time travel to version 4",run:async()=>{const v=4;await say(`Time travel. Because nothing was ever overwritten, I can rebuild the workbench exactly as it was at version ${v}, by replaying the first ${v} events.`);tab="tt";W.ttSel=v;W.tt=v;renderForm();renderRight();if(!quiet)$("#form").scrollIntoView({behavior:"smooth"});}},
+ {t:"Summary",run:async()=>say("That's the whole pattern. Every field becomes a command, then an event, then a set of projections. Reference data is versioned the same way, so new currencies, new regions and retired values never break old records. Press Back to live to return to the current version.")}];
+
+function updateDemoUI(){
+  const cur=demoIdx-1;
+  $("#demoCtr").textContent=demoIdx===0?`Step 0 of ${DEMO.length} · not started`:`Step ${demoIdx} of ${DEMO.length} · ${DEMO[cur].t}`;
+  $("#demoPrev").disabled=demoBusy||demoIdx===0;
+  $("#demoNext").disabled=demoBusy||demoIdx>=DEMO.length;
+  $("#demoNext").textContent=demoIdx===0?"Start ▶":"Next ▶";
+  $("#demoSel").value=String(Math.max(0,cur));
+  $("#demoSel").disabled=demoBusy;
+  $("#demoBtn").textContent=demoRunning?"■ Stop":"▶ Play all";
 }
+async function runDemoStep(i){demoBusy=true;updateDemoUI();try{await DEMO[i].run();}catch(e){console.error(e);}demoIdx=i+1;demoBusy=false;updateDemoUI();}
+async function demoNext(){if(demoBusy||demoIdx>=DEMO.length)return;await runDemoStep(demoIdx);}
+async function demoJump(k){ // show step k: rebuild the lab quietly up to k-1, then play k with narration
+  if(demoBusy)return; stopSpeech(); demoBusy=true; updateDemoUI();
+  resetLab(); quiet=true; $("#narr").textContent="Rewinding the lab…";
+  try{for(let i=0;i<k;i++) await DEMO[i].run();}finally{quiet=false;}
+  demoIdx=k; demoBusy=false;
+  if(k===0&&demoIdx===0){await runDemoStep(0);return;}
+  await runDemoStep(k);
+}
+async function demoPrev(){if(demoBusy||demoIdx===0)return;await demoJump(Math.max(0,demoIdx-2));}
+async function demo(){
+  if(demoRunning){demoRunning=false;stopSpeech();updateDemoUI();return;}
+  demoRunning=true;updateDemoUI();
+  if(demoIdx>=DEMO.length){resetLab();demoIdx=0;}
+  while(demoRunning&&demoIdx<DEMO.length){await runDemoStep(demoIdx);await wait(500*pace);}
+  demoRunning=false;updateDemoUI();
+}
+function stopSpeech(){speakTok++;if(synth)synth.cancel();$("#live").classList.remove("on");}
 
 /* ================================================================ init */
+function resetLab(){const shown=W?W.typesShown:true;queue.length=0;tab="stream";boot();W.typesShown=shown;renderForm();$("#explain").innerHTML="<li>Lab reset.</li>";$("#cmdJson").textContent="—";$("#evJson").textContent="—";}
 function boot(){
   newWorld(); W.typesShown=W.typesShown??true;
   renderStages(); renderForm(); renderRight(); renderLog();
@@ -820,7 +852,11 @@ function init(){
   if(!synth){voiceOn=false;$("#voiceBtn").textContent="Captions only";$("#voiceBtn").disabled=true;}
   $("#paceSel").onchange=e=>{pace=+e.target.value;};
   $("#typesBtn").onclick=()=>{W.typesShown=!W.typesShown;$("#typesBtn").textContent="Field types: "+(W.typesShown?"shown":"hidden");$("#form").classList.toggle("hidetypes",!W.typesShown);};
-  $("#resetBtn").onclick=()=>{demoRunning=false;speakTok++;if(synth)synth.cancel();const shown=W.typesShown;queue.length=0;boot();W.typesShown=shown;renderForm();$("#explain").innerHTML="<li>Lab reset.</li>";$("#cmdJson").textContent="—";$("#evJson").textContent="—";};
+  $("#resetBtn").onclick=()=>{if(demoBusy)return;demoRunning=false;stopSpeech();resetLab();demoIdx=0;updateDemoUI();$("#narr").textContent="Lab reset. Press Start to begin the guided demo, or edit any field.";};
+  $("#demoNext").onclick=demoNext; $("#demoPrev").onclick=demoPrev;
+  $("#demoSel").innerHTML=DEMO.map((d,i)=>`<option value="${i}">${i+1}. ${esc(d.t)}</option>`).join("");
+  $("#demoSel").onchange=e=>demoJump(+e.target.value);
+  updateDemoUI();
   const themes=["system","light","dark"];let ti=0;try{ti=Math.max(0,themes.indexOf(localStorage.getItem("wb-theme")||"system"));}catch(e){}
   const applyTheme=()=>{const t=themes[ti];if(t==="system")document.documentElement.removeAttribute("data-theme");else document.documentElement.setAttribute("data-theme",t);$("#themeBtn").textContent="Theme: "+t;try{localStorage.setItem("wb-theme",t);}catch(e){}};
   $("#themeBtn").onclick=()=>{ti=(ti+1)%3;applyTheme();};applyTheme();
